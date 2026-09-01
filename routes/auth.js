@@ -4,8 +4,8 @@ const { supabase, supabaseAdmin } = require('../supabase');
 
 // POST /api/auth/signup
 router.post('/signup', async (req, res) => {
-  const { email, password, nick, gender, birth } = req.body;
-  console.log('[signup] 요청:', { email, nick, gender, birth });
+  const { email, password, nick, gender, birth, phone } = req.body;
+  console.log('[signup] 요청:', { email, nick, gender, birth, phone });
 
   const { data, error } = await supabase.auth.signUp({ email, password });
   if (error) {
@@ -29,7 +29,7 @@ router.post('/signup', async (req, res) => {
 
   const { error: profileError } = await supabaseAdmin
     .from('sjj_user')
-    .update({ nick, gender, birth })
+    .update({ nick, gender, birth, phone })
     .eq('id', user_id);
 
   if (profileError) {
