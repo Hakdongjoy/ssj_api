@@ -4,8 +4,9 @@ const { supabase, supabaseAdmin } = require('../supabase');
 
 // POST /api/auth/signup
 router.post('/signup', async (req, res) => {
-  const { email, password, nick, gender, birth, phone } = req.body;
-  console.log('[signup] 요청:', { email, nick, gender, birth, phone });
+  const { id, password, nick, gender, birth, phone } = req.body;
+  const email = id + '@saljjak.com';
+  console.log('[signup] 요청:', { id, email, nick, gender, birth, phone });
 
   const { data, error } = await supabase.auth.signUp({ email, password });
   if (error) {
@@ -44,8 +45,9 @@ router.post('/signup', async (req, res) => {
 
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
-  console.log('[login] 요청:', { email });
+  const { id, password } = req.body;
+  const email = id + '@saljjak.com';
+  console.log('[login] 요청:', { id, email });
 
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) {
