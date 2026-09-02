@@ -36,6 +36,7 @@ router.post('/pref', async (req, res) => {
     budget_min, budget_max,
     regions,
     no_smoker, no_pet, no_noise, no_drink, no_homebody, no_messy,
+    cook, wfh,
     location_at,
   } = req.body;
   console.log('[pref] 요청 user_id:', user_id);
@@ -55,6 +56,7 @@ router.post('/pref', async (req, res) => {
       budget_min, budget_max,
       regions,
       no_smoker, no_pet, no_noise, no_drink, no_homebody, no_messy,
+      cook, wfh,
     });
 
   if (error) {
