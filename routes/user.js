@@ -38,6 +38,8 @@ router.post('/pref', async (req, res) => {
     no_smoker, no_pet, no_noise, no_drink, no_homebody, no_messy,
     cook, wfh,
     pet_type, pet_name, pet_memo,
+    subway_stn,
+    bio,
     location_at,
   } = req.body;
   console.log('[pref] 요청 user_id:', user_id);
@@ -59,6 +61,7 @@ router.post('/pref', async (req, res) => {
       no_smoker, no_pet, no_noise, no_drink, no_homebody, no_messy,
       cook, wfh,
       pet_type, pet_name, pet_memo,
+      subway_stn,
     }, { onConflict: 'user_id' });
 
   if (error) {
@@ -68,6 +71,10 @@ router.post('/pref', async (req, res) => {
 
   if (location_at) {
     await supabaseAdmin.from('sjj_user').update({ location_at }).eq('id', user_id);
+  }
+
+  if (bio) {
+    await supabaseAdmin.from('sjj_user').update({ bio }).eq('id', user_id);
   }
 
   console.log('[pref] 완료');
