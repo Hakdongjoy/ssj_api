@@ -44,7 +44,7 @@ router.post('/pref', async (req, res) => {
 
   const { error } = await supabaseAdmin
     .from('sjj_pref')
-    .insert({
+    .upsert({
       user_id,
       sleep_hour, wake_hour,
       noise_lvl,
@@ -59,7 +59,7 @@ router.post('/pref', async (req, res) => {
       no_smoker, no_pet, no_noise, no_drink, no_homebody, no_messy,
       cook, wfh,
       pet_type, pet_name, pet_memo,
-    });
+    }, { onConflict: 'user_id' });
 
   if (error) {
     console.error('[pref] 실패:', error.message);
