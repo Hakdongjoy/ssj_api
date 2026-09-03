@@ -2,25 +2,6 @@ const express = require('express');
 const router = express.Router();
 const { supabaseAdmin } = require('../supabase');
 
-// PATCH /api/user/profile
-router.patch('/profile', async (req, res) => {
-  const { user_id, job, bio, avatar_url, phone } = req.body;
-  console.log('[profile] 요청:', { user_id, job });
-
-  const { error } = await supabaseAdmin
-    .from('sjj_user')
-    .update({ job, bio, avatar_url, phone })
-    .eq('id', user_id);
-
-  if (error) {
-    console.error('[profile] 실패:', error.message);
-    return res.status(500).json({ code: 'PROFILE_UPDATE_FAILED', error: error.message });
-  }
-
-  console.log('[profile] 완료');
-  res.json({ success: true });
-});
-
 // POST /api/user/pref
 router.post('/pref', async (req, res) => {
   const {
