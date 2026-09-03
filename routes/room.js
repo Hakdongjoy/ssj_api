@@ -19,7 +19,7 @@ router.post('/register', async (req, res) => {
     noise_lvl, home_time, clean_freq, drink_freq,
     smoking, pet, pet_type, pet_name, pet_memo,
     cook, wfh,
-    no_smoker, no_pet, no_noise, no_drink, no_homebody, no_messy,
+    no_smoker, no_pet, no_drink,
     // 동의
     location_at,
   } = req.body;
@@ -52,7 +52,7 @@ router.post('/register', async (req, res) => {
       noise_lvl, home_time, clean_freq, drink_freq,
       smoking, pet, pet_type, pet_name, pet_memo,
       cook, wfh,
-      no_smoker, no_pet, no_noise, no_drink, no_homebody, no_messy,
+      no_smoker, no_pet, no_drink,
     }, { onConflict: 'user_id' });
 
   if (prefError) {
@@ -137,7 +137,7 @@ router.get('/:id', async (req, res) => {
 
   const { data: pref } = await supabaseAdmin
     .from('sjj_pref')
-    .select('bio, noise_lvl, home_time, clean_freq, drink_freq, smoking, pet, pet_type, pet_name, pet_memo, cook, wfh, no_smoker, no_pet, no_noise, no_drink, no_homebody, no_messy')
+    .select('bio, noise_lvl, home_time, clean_freq, drink_freq, smoking, pet, pet_type, pet_name, pet_memo, cook, wfh, no_smoker, no_pet, no_drink')
     .eq('user_id', data.user_id)
     .single();
 
@@ -175,10 +175,7 @@ router.get('/:id', async (req, res) => {
     wfh: pref?.wfh,
     no_smoker: pref?.no_smoker,
     no_pet: pref?.no_pet,
-    no_noise: pref?.no_noise,
     no_drink: pref?.no_drink,
-    no_homebody: pref?.no_homebody,
-    no_messy: pref?.no_messy,
   });
 });
 
