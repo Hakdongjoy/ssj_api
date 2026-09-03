@@ -2,14 +2,14 @@ const express = require('express');
 const router = express.Router();
 const { supabaseAdmin } = require('../supabase');
 
-const ADJ = ['따뜻한','조용한','활발한','깔끔한','유쾌한','다정한','느긋한','부지런한','센스있는','배려깊은'];
-const NOUN = ['달팽이','고양이','강아지','햄스터','너구리','판다','수달','토끼','여우','곰돌이'];
+const ADJ = ['향기로운','달콤한','귀여운','용감한','신비로운','행복한','졸린','배고픈','빠른','느긋한','차가운','따뜻한','반짝이는','조용한','시끄러운'];
+const NOUN = ['반찬','고양이','강아지','토끼','감자','치킨','라면','두부','김치','사과','망고','오징어','햄버거','붕어빵','만두'];
 
 // GET /api/user/nick/random
 router.get('/nick/random', (req, res) => {
   const adj = ADJ[Math.floor(Math.random() * ADJ.length)];
   const noun = NOUN[Math.floor(Math.random() * NOUN.length)];
-  res.json({ nick: `${adj} ${noun}` });
+  res.json({ nick: `${adj}${noun}` });
 });
 
 // PATCH /api/user/nick
