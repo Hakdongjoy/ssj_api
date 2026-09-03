@@ -18,7 +18,7 @@ router.post('/register', async (req, res) => {
     sleep_hour, wake_hour,
     noise_lvl, home_time, clean_freq, drink_freq,
     smoking, pet, pet_type, pet_name, pet_memo,
-    cook, wfh,
+    wfh, job,
     no_smoker, no_pet, no_drink,
     // 동의
     location_at,
@@ -51,18 +51,22 @@ router.post('/register', async (req, res) => {
       sleep_hour, wake_hour,
       noise_lvl, home_time, clean_freq, drink_freq,
       smoking, pet, pet_type, pet_name, pet_memo,
-      cook, wfh,
+      wfh,
       no_smoker, no_pet, no_drink,
     }, { onConflict: 'user_id' });
+
 
   if (prefError) {
     console.error('[room/register] pref 실패:', prefError.message);
     return res.status(500).json({ code: 'PREF_SAVE_FAILED', error: prefError.message });
   }
 
-  // 위치기반 동의
-  if (location_at) {
-    await supabaseAdmin.from('sjj_user').update({ location_at }).eq('id', user_id);
+  // sjj_user 업데이트
+  const userUpdate = {};
+  if (job) userUpdate.job = job;
+  if (location_at) userUpdate.location_at = location_at;
+  if (Object.keys(userUpdate).length > 0) {
+    await supabaseAdmin.from('sjj_user').update(userUpdate).eq('id', user_id);
   }
 
   console.log('[room/register] 완료');
