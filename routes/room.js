@@ -69,6 +69,11 @@ router.post('/register', async (req, res) => {
   res.json({ success: true });
 });
 
+function calcAge(birth) {
+  if (!birth) return null;
+  return new Date().getFullYear() - new Date(birth).getFullYear() + 1;
+}
+
 // GET /api/room/list?region=서울&page=1&limit=20
 router.get('/list', async (req, res) => {
   const { region, page = 1, limit = 20 } = req.query;
@@ -76,33 +81,32 @@ router.get('/list', async (req, res) => {
 
   let query = supabaseAdmin
     .from('sjj_room')
-    .select(`
-      id, user_id, region, subway_stn, rent, maint_fee, pref_gender,
-      sjj_user!user_id (nick, gender, birth, job, avatar_url),
-      sjj_pref!user_id (bio)
-    `)
+    .select('id, user_id, region, subway_stn, rent, maint_fee, pref_gender, sjj_user!user_id(nick, gender, birth, job, avatar_url)')
     .eq('is_active', true)
     .order('created_at', { ascending: false })
     .range(offset, offset + Number(limit) - 1);
 
-  if (region) {
-    query = query.ilike('region', `${region}%`);
-  }
+  if (region) query = query.ilike('region', `${region}%`);
 
   const { data, error } = await query;
   if (error) return res.status(500).json({ code: 'LIST_FETCH_FAILED', error: error.message });
 
-  const now = new Date();
+  const userIds = data.map(r => r.user_id);
+  const { data: prefs } = await supabaseAdmin
+    .from('sjj_pref')
+    .select('user_id, bio')
+    .in('user_id', userIds);
+
+  const prefMap = Object.fromEntries((prefs || []).map(p => [p.user_id, p]));
+
   const list = data.map(r => {
     const user = r.sjj_user;
-    const pref = r.sjj_pref;
-    const birthYear = user?.birth ? new Date(user.birth).getFullYear() : null;
-    const age = birthYear ? now.getFullYear() - birthYear + 1 : null;
+    const pref = prefMap[r.user_id];
     return {
       id: r.id,
       nick: user?.nick,
       gender: user?.gender,
-      age,
+      age: calcAge(user?.birth),
       job: user?.job,
       avatar_url: user?.avatar_url,
       region: r.region,
@@ -125,31 +129,25 @@ router.get('/:id', async (req, res) => {
 
   const { data, error } = await supabaseAdmin
     .from('sjj_room')
-    .select(`
-      *,
-      sjj_user!user_id (nick, gender, birth, job, avatar_url),
-      sjj_pref!user_id (
-        bio, noise_lvl, home_time, clean_freq, drink_freq,
-        smoking, pet, pet_type, pet_name, pet_memo, cook, wfh,
-        no_smoker, no_pet, no_noise, no_drink, no_homebody, no_messy
-      )
-    `)
+    .select('*, sjj_user!user_id(nick, gender, birth, job, avatar_url)')
     .eq('id', id)
     .single();
 
   if (error) return res.status(404).json({ code: 'ROOM_NOT_FOUND', error: error.message });
 
+  const { data: pref } = await supabaseAdmin
+    .from('sjj_pref')
+    .select('bio, noise_lvl, home_time, clean_freq, drink_freq, smoking, pet, pet_type, pet_name, pet_memo, cook, wfh, no_smoker, no_pet, no_noise, no_drink, no_homebody, no_messy')
+    .eq('user_id', data.user_id)
+    .single();
+
   const user = data.sjj_user;
-  const pref = data.sjj_pref;
-  const now = new Date();
-  const birthYear = user?.birth ? new Date(user.birth).getFullYear() : null;
-  const age = birthYear ? now.getFullYear() - birthYear + 1 : null;
 
   res.json({
     id: data.id,
     nick: user?.nick,
     gender: user?.gender,
-    age,
+    age: calcAge(user?.birth),
     job: user?.job,
     avatar_url: user?.avatar_url,
     region: data.region,
