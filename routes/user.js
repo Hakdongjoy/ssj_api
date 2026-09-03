@@ -6,10 +6,22 @@ const ADJ = ['향기로운','달콤한','귀여운','용감한','신비로운','
 const NOUN = ['반찬','고양이','강아지','토끼','감자','치킨','라면','두부','김치','사과','망고','오징어','햄버거','붕어빵','만두'];
 
 // GET /api/user/nick/random
-router.get('/nick/random', (req, res) => {
+router.get('/nick/random', async (req, res) => {
   const adj = ADJ[Math.floor(Math.random() * ADJ.length)];
   const noun = NOUN[Math.floor(Math.random() * NOUN.length)];
-  res.json({ nick: `${adj}${noun}` });
+  const base = `${adj}${noun}`;
+
+  const { data } = await supabaseAdmin
+    .from('sjj_user')
+    .select('nick')
+    .ilike('nick', `${base}%`);
+
+  const existing = new Set((data || []).map(r => r.nick));
+  if (!existing.has(base)) return res.json({ nick: base });
+
+  let n = 2;
+  while (existing.has(`${base}${n}`)) n++;
+  res.json({ nick: `${base}${n}` });
 });
 
 // PATCH /api/user/nick
