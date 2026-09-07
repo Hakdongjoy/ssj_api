@@ -1,31 +1,25 @@
 const express = require('express');
 const router = express.Router();
 const { supabaseAdmin } = require('../supabase');
+const verifyToken = require('../middleware/auth');
 
 // POST /api/room/register
-router.post('/register', async (req, res) => {
+router.post('/register', verifyToken, async (req, res) => {
+  const user_id = req.user.id;
   const {
-    user_id,
-    // 지역/위치
     region, subway_stn, walk_min,
-    // 비용
     rent, maint_fee,
-    // 방 정보
     share_type, note,
-    // 선호조건
     pref_gender, pref_age_min, pref_age_max,
-    // 생활패턴
     sleep_hour, wake_hour,
     noise_lvl, home_time, clean_freq, drink_freq,
     smoking, pet, pet_type, pet_name, pet_memo,
     wfh, job,
     no_smoker, no_pet, no_drink,
-    // 동의
     location_at,
   } = req.body;
   console.log('[room/register] 요청 user_id:', user_id);
 
-  // sjj_room INSERT
   const { error: roomError } = await supabaseAdmin
     .from('sjj_room')
     .insert({
@@ -43,7 +37,6 @@ router.post('/register', async (req, res) => {
     return res.status(500).json({ code: 'ROOM_REGISTER_FAILED', error: roomError.message });
   }
 
-  // sjj_pref UPSERT (생활패턴)
   const { error: prefError } = await supabaseAdmin
     .from('sjj_pref')
     .upsert({
@@ -55,16 +48,14 @@ router.post('/register', async (req, res) => {
       no_smoker, no_pet, no_drink,
     }, { onConflict: 'user_id' });
 
-
   if (prefError) {
     console.error('[room/register] pref 실패:', prefError.message);
     return res.status(500).json({ code: 'PREF_SAVE_FAILED', error: prefError.message });
   }
 
-  // sjj_user 업데이트
   const userUpdate = {};
   if (job) userUpdate.job = job;
-  if (location_at) userUpdate.location_at = location_at;
+  if (location_at !== undefined) userUpdate.location_at = location_at;
   if (Object.keys(userUpdate).length > 0) {
     await supabaseAdmin.from('sjj_user').update(userUpdate).eq('id', user_id);
   }
@@ -78,7 +69,7 @@ function calcAge(birth) {
   return new Date().getFullYear() - new Date(birth).getFullYear() + 1;
 }
 
-// GET /api/room/list?region=서울&page=1&limit=20
+// GET /api/room/list?region=서울&page=1&limit=20 — 인증 불필요
 router.get('/list', async (req, res) => {
   const { region, page = 1, limit = 20 } = req.query;
   const offset = (Number(page) - 1) * Number(limit);
@@ -127,7 +118,7 @@ router.get('/list', async (req, res) => {
   res.json({ total: data.length, page: Number(page), list });
 });
 
-// GET /api/room/:id
+// GET /api/room/:id — 인증 불필요
 router.get('/:id', async (req, res) => {
   const { id } = req.params;
 

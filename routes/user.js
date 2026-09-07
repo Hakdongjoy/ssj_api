@@ -1,11 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const { supabaseAdmin } = require('../supabase');
+const verifyToken = require('../middleware/auth');
 
 const ADJ = ['향기로운','달콤한','귀여운','용감한','신비로운','행복한','졸린','배고픈','빠른','느긋한','차가운','따뜻한','반짝이는','조용한','시끄러운'];
 const NOUN = ['반찬','고양이','강아지','토끼','감자','치킨','라면','두부','김치','사과','망고','오징어','햄버거','붕어빵','만두'];
 
-// GET /api/user/nick/random
+// GET /api/user/nick/random — 인증 불필요
 router.get('/nick/random', async (req, res) => {
   const adj = ADJ[Math.floor(Math.random() * ADJ.length)];
   const noun = NOUN[Math.floor(Math.random() * NOUN.length)];
@@ -25,20 +26,24 @@ router.get('/nick/random', async (req, res) => {
 });
 
 // PATCH /api/user/nick
-router.patch('/nick', async (req, res) => {
-  const { user_id, nick } = req.body;
+router.patch('/nick', verifyToken, async (req, res) => {
+  const user_id = req.user.id;
+  const { nick } = req.body;
+
   if (!nick || nick.trim().length === 0) {
     return res.status(400).json({ code: 'INVALID_NICK', error: '닉네임을 입력해주세요' });
   }
+
   const { error } = await supabaseAdmin.from('sjj_user').update({ nick: nick.trim() }).eq('id', user_id);
   if (error) return res.status(500).json({ code: 'NICK_UPDATE_FAILED', error: error.message });
+
   res.json({ success: true, nick: nick.trim() });
 });
 
 // POST /api/user/pref
-router.post('/pref', async (req, res) => {
+router.post('/pref', verifyToken, async (req, res) => {
+  const user_id = req.user.id;
   const {
-    user_id,
     sleep_hour, wake_hour,
     noise_lvl,
     home_time,
@@ -79,12 +84,11 @@ router.post('/pref', async (req, res) => {
     return res.status(500).json({ code: 'PREF_SAVE_FAILED', error: error.message });
   }
 
-  if (location_at) {
-    await supabaseAdmin.from('sjj_user').update({ location_at }).eq('id', user_id);
-  }
-
-  if (bio) {
-    await supabaseAdmin.from('sjj_user').update({ bio }).eq('id', user_id);
+  const userUpdate = {};
+  if (location_at !== undefined) userUpdate.location_at = location_at;
+  if (bio) userUpdate.bio = bio;
+  if (Object.keys(userUpdate).length > 0) {
+    await supabaseAdmin.from('sjj_user').update(userUpdate).eq('id', user_id);
   }
 
   console.log('[pref] 완료');
