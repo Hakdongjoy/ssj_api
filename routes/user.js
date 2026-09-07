@@ -40,55 +40,52 @@ router.patch('/nick', verifyToken, async (req, res) => {
   res.json({ success: true, nick: nick.trim() });
 });
 
-// POST /api/user/pref
+// POST /api/user/pref — 방 없는 사람 추가정보
 router.post('/pref', verifyToken, async (req, res) => {
   const user_id = req.user.id;
   const {
-    sleep_hour, wake_hour,
-    noise_lvl,
-    home_time,
-    clean_freq,
-    drink_freq,
-    smoking, pet,
+    // 희망 지역 (sjj_room)
+    region, district, subway_stn,
     pref_gender,
-    regions,
     no_smoker, no_pet, no_drink,
-    wfh,
-    pet_type, pet_name, pet_memo,
-    subway_stn,
-    bio,
-    location_at,
+    profile_agree, location_agree, push_agree, marketing_agree,
+    // 생활습관 (sjj_user_prof)
+    job, wfh,
+    sleep_hour, wake_hour,
+    noise_lvl, home_time, clean_freq, drink_freq,
+    smoking, pet, pet_type, pet_type_input, pet_name, pet_memo,
   } = req.body;
   console.log('[pref] 요청 user_id:', user_id);
 
-  const { error } = await supabaseAdmin
-    .from('sjj_pref')
+  const { error: profError } = await supabaseAdmin
+    .from('sjj_user_prof')
     .upsert({
       user_id,
+      job, wfh,
       sleep_hour, wake_hour,
-      noise_lvl,
-      home_time,
-      clean_freq,
-      drink_freq,
-      smoking, pet,
-      pref_gender,
-      regions,
-      no_smoker, no_pet, no_drink,
-      wfh,
-      pet_type, pet_name, pet_memo,
-      subway_stn,
+      noise_lvl, home_time, clean_freq, drink_freq,
+      smoking, pet, pet_type, pet_type_input, pet_name, pet_memo,
     }, { onConflict: 'user_id' });
 
-  if (error) {
-    console.error('[pref] 실패:', error.message);
-    return res.status(500).json({ code: 'PREF_SAVE_FAILED', error: error.message });
+  if (profError) {
+    console.error('[pref] prof 실패:', profError.message);
+    return res.status(500).json({ code: 'PROF_SAVE_FAILED', error: profError.message });
   }
 
-  const userUpdate = {};
-  if (location_at !== undefined) userUpdate.location_at = location_at;
-  if (bio) userUpdate.bio = bio;
-  if (Object.keys(userUpdate).length > 0) {
-    await supabaseAdmin.from('sjj_user').update(userUpdate).eq('id', user_id);
+  const { error: roomError } = await supabaseAdmin
+    .from('sjj_room')
+    .insert({
+      user_id,
+      situation: 'no_room',
+      region, district, subway_stn,
+      pref_gender,
+      no_smoker, no_drink, no_pet,
+      profile_agree, location_agree, push_agree, marketing_agree,
+    });
+
+  if (roomError) {
+    console.error('[pref] room 실패:', roomError.message);
+    return res.status(500).json({ code: 'PREF_SAVE_FAILED', error: roomError.message });
   }
 
   console.log('[pref] 완료');
