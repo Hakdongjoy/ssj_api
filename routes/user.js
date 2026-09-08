@@ -48,6 +48,7 @@ router.post('/pref', verifyToken, async (req, res) => {
     region, district, subway_stn,
     pref_gender,
     no_smoker, no_pet, no_drink,
+    bio,
     profile_agree, location_agree, push_agree, marketing_agree,
     // 생활습관 (sjj_user_prof)
     job, wfh,
@@ -80,6 +81,7 @@ router.post('/pref', verifyToken, async (req, res) => {
       region, district, subway_stn,
       pref_gender,
       no_smoker, no_drink, no_pet,
+      bio,
       profile_agree, location_agree, push_agree, marketing_agree,
     });
 

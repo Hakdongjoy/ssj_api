@@ -82,7 +82,7 @@ router.get('/list', async (req, res) => {
 
   let query = supabaseAdmin
     .from('sjj_room')
-    .select('id, user_id, region, district, subway_stn, rent, maint_fee, pref_gender, share_rent_type, share_rent_amount, share_maint_type, share_maint_amount, bio, sjj_user!user_id(nick, gender, birth, avatar_url)')
+    .select('id, user_id, region, district, subway_stn, rent, maint_fee, pref_gender, share_rent_type, share_rent_amount, share_maint_type, share_maint_amount, bio, sjj_user!user_id(nick, gender, birth)')
     .eq('situation', 'has_room')
     .eq('is_active', true)
     .order('created_at', { ascending: false })
@@ -112,7 +112,6 @@ router.get('/list', async (req, res) => {
       gender: user?.gender,
       age: calcAge(user?.birth),
       job: prof?.job,
-      avatar_url: user?.avatar_url,
       region: r.region,
       district: r.district,
       subway_stn: r.subway_stn,
@@ -133,7 +132,7 @@ router.get('/:id', async (req, res) => {
 
   const { data, error } = await supabaseAdmin
     .from('sjj_room')
-    .select('*, sjj_user!user_id(nick, gender, birth, avatar_url)')
+    .select('*, sjj_user!user_id(nick, gender, birth)')
     .eq('id', id)
     .single();
 
@@ -154,7 +153,6 @@ router.get('/:id', async (req, res) => {
     nick: user?.nick,
     gender: user?.gender,
     age: calcAge(user?.birth),
-    avatar_url: user?.avatar_url,
     region: data.region,
     district: data.district,
     subway_stn: data.subway_stn,

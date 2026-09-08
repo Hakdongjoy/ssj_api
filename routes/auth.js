@@ -8,6 +8,10 @@ router.post('/signup', async (req, res) => {
   const email = id + '@saljjak.com';
   console.log('[signup] 요청:', { id, email, nick, gender, birth, phone });
 
+  if (!password || password.length < 8) {
+    return res.status(400).json({ code: 'WEAK_PASSWORD', error: '비밀번호는 8자 이상이어야 합니다' });
+  }
+
   const { data, error } = await supabase.auth.signUp({ email, password });
   if (error) {
     console.error('[signup] Step1 실패:', error.message);
@@ -19,7 +23,7 @@ router.post('/signup', async (req, res) => {
       return res.status(400).json({ code: 'INVALID_EMAIL', error: '이메일 형식이 올바르지 않습니다' });
     }
     if (msg.includes('Password')) {
-      return res.status(400).json({ code: 'WEAK_PASSWORD', error: '비밀번호는 6자 이상이어야 합니다' });
+      return res.status(400).json({ code: 'WEAK_PASSWORD', error: '비밀번호는 8자 이상이어야 합니다' });
     }
     return res.status(400).json({ code: 'SIGNUP_FAILED', error: msg });
   }
