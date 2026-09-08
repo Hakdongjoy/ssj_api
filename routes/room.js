@@ -27,7 +27,7 @@ router.post('/register', verifyToken, async (req, res) => {
     avoid_smoke, avoid_drink, avoid_pet,
     bio,
     profile_agree, location_agree, push_agree, marketing_agree,
-    // 생활습관 (sjj_user_prof)
+    // 생활습관 (sjj_user_info)
     job, is_remote,
     sleep_hour, wake_hour,
     pers_type, home_time, clean_freq, drink_freq,
@@ -36,7 +36,7 @@ router.post('/register', verifyToken, async (req, res) => {
   console.log('[room/register] 요청 user_id:', user_id);
 
   const { error: profError } = await supabaseAdmin
-    .from('sjj_user_prof')
+    .from('sjj_user_info')
     .upsert({
       user_id,
       job, is_remote,
@@ -93,7 +93,7 @@ router.get('/list', async (req, res) => {
 
   const userIds = data.map(r => r.user_id);
   const { data: profs } = await supabaseAdmin
-    .from('sjj_user_prof')
+    .from('sjj_user_info')
     .select('user_id, job')
     .in('user_id', userIds);
 
@@ -137,7 +137,7 @@ router.get('/:id', async (req, res) => {
   if (error) return res.status(404).json({ code: 'ROOM_NOT_FOUND', error: error.message });
 
   const { data: prof } = await supabaseAdmin
-    .from('sjj_user_prof')
+    .from('sjj_user_info')
     .select('job, is_remote, sleep_hour, wake_hour, pers_type, home_time, clean_freq, drink_freq, smoking, pet, pet_type, pet_type_input, pet_name, pet_memo')
     .eq('user_id', data.user_id)
     .single();
