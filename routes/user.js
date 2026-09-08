@@ -44,10 +44,8 @@ router.patch('/nick', verifyToken, async (req, res) => {
 router.post('/pref', verifyToken, async (req, res) => {
   const user_id = req.user.id;
   const {
-    // 희망 지역·조건 (sjj_room_pref)
+    // 희망 지역 + 한마디 + 동의 (sjj_room_pref)
     region, district, subway_stn,
-    pref_gender,
-    avoid_smoke, avoid_drink, avoid_pet,
     bio,
     profile_agree, location_agree, push_agree, marketing_agree,
     // 추가정보 (sjj_user_info)
@@ -78,8 +76,6 @@ router.post('/pref', verifyToken, async (req, res) => {
     .insert({
       user_id,
       region, district, subway_stn,
-      pref_gender,
-      avoid_smoke, avoid_drink, avoid_pet,
       bio,
       profile_agree, location_agree, push_agree, marketing_agree,
     });
