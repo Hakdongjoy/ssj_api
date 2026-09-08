@@ -50,7 +50,7 @@ router.post('/pref', verifyToken, async (req, res) => {
     avoid_smoke, avoid_drink, avoid_pet,
     bio,
     profile_agree, location_agree, push_agree, marketing_agree,
-    // 생활습관 (sjj_user_info)
+    // 추가정보 (sjj_user_info)
     job, is_remote,
     sleep_hour, wake_hour,
     pers_type, home_time, clean_freq, drink_freq,
