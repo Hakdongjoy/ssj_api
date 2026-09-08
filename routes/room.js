@@ -29,7 +29,7 @@ router.post('/register', verifyToken, async (req, res) => {
     bio,
     profile_agree, location_agree, push_agree, marketing_agree,
     // 추가정보 (sjj_user_info)
-    job, is_remote,
+    job, job_input, is_remote,
     sleep_hour, wake_hour,
     pers_type, home_time, clean_freq, drink_freq,
     smoking, pet, pet_type, pet_type_input, pet_name, pet_memo,
@@ -40,7 +40,7 @@ router.post('/register', verifyToken, async (req, res) => {
     .from('sjj_user_info')
     .upsert({
       user_id,
-      job, is_remote,
+      job, job_input, is_remote,
       sleep_hour, wake_hour,
       pers_type, home_time, clean_freq, drink_freq,
       smoking, pet, pet_type, pet_type_input, pet_name, pet_memo,
@@ -108,7 +108,7 @@ router.get('/list', optionalAuth, async (req, res) => {
   const userIds = data.map(r => r.user_id);
   const { data: profs } = await supabaseAdmin
     .from('sjj_user_info')
-    .select('user_id, job')
+    .select('user_id, job, job_input')
     .in('user_id', userIds);
 
   const profMap = Object.fromEntries((profs || []).map(p => [p.user_id, p]));
@@ -124,6 +124,7 @@ router.get('/list', optionalAuth, async (req, res) => {
       gender: user?.gender,
       age: calcAge(user?.birth),
       job: prof?.job,
+      job_input: prof?.job_input,
       region: r.region,
       district: r.district,
       subway_stn: r.subway_stn,
@@ -164,7 +165,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
 
   const { data: prof } = await supabaseAdmin
     .from('sjj_user_info')
-    .select('job, is_remote, sleep_hour, wake_hour, pers_type, home_time, clean_freq, drink_freq, smoking, pet, pet_type, pet_type_input, pet_name, pet_memo')
+    .select('job, job_input, is_remote, sleep_hour, wake_hour, pers_type, home_time, clean_freq, drink_freq, smoking, pet, pet_type, pet_type_input, pet_name, pet_memo')
     .eq('user_id', data.user_id)
     .single();
 
@@ -194,6 +195,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
     avoid_pet: data.avoid_pet,
     bio: data.bio,
     job: prof?.job,
+    job_input: prof?.job_input,
     is_remote: prof?.is_remote,
     sleep_hour: prof?.sleep_hour,
     wake_hour: prof?.wake_hour,

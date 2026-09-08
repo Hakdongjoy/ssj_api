@@ -49,7 +49,7 @@ router.post('/pref', verifyToken, async (req, res) => {
     bio,
     profile_agree, location_agree, push_agree, marketing_agree,
     // 추가정보 (sjj_user_info)
-    job, is_remote,
+    job, job_input, is_remote,
     sleep_hour, wake_hour,
     pers_type, home_time, clean_freq, drink_freq,
     smoking, pet, pet_type, pet_type_input, pet_name, pet_memo,
@@ -60,7 +60,7 @@ router.post('/pref', verifyToken, async (req, res) => {
     .from('sjj_user_info')
     .upsert({
       user_id,
-      job, is_remote,
+      job, job_input, is_remote,
       sleep_hour, wake_hour,
       pers_type, home_time, clean_freq, drink_freq,
       smoking, pet, pet_type, pet_type_input, pet_name, pet_memo,
