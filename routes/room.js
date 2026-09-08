@@ -14,7 +14,7 @@ function calcShare(fullAmt, type, customAmt) {
   return null; // negotiate → 직접조율, 고정값 없음
 }
 
-// POST /api/room/register — 방 있는 사람 추가정보
+// POST /api/room/register — 방 있는 사람 공고 등록
 router.post('/register', verifyToken, async (req, res) => {
   const user_id = req.user.id;
   const {
@@ -24,13 +24,13 @@ router.post('/register', verifyToken, async (req, res) => {
     pref_gender,
     share_rent_type, share_rent_amount,
     share_maint_type, share_maint_amount,
-    no_smoker, no_drink, no_pet,
+    avoid_smoke, avoid_drink, avoid_pet,
     bio,
     profile_agree, location_agree, push_agree, marketing_agree,
     // 생활습관 (sjj_user_prof)
-    job, wfh,
+    job, is_remote,
     sleep_hour, wake_hour,
-    noise_lvl, home_time, clean_freq, drink_freq,
+    pers_type, home_time, clean_freq, drink_freq,
     smoking, pet, pet_type, pet_type_input, pet_name, pet_memo,
   } = req.body;
   console.log('[room/register] 요청 user_id:', user_id);
@@ -39,9 +39,9 @@ router.post('/register', verifyToken, async (req, res) => {
     .from('sjj_user_prof')
     .upsert({
       user_id,
-      job, wfh,
+      job, is_remote,
       sleep_hour, wake_hour,
-      noise_lvl, home_time, clean_freq, drink_freq,
+      pers_type, home_time, clean_freq, drink_freq,
       smoking, pet, pet_type, pet_type_input, pet_name, pet_memo,
     }, { onConflict: 'user_id' });
 
@@ -54,13 +54,12 @@ router.post('/register', verifyToken, async (req, res) => {
     .from('sjj_room')
     .insert({
       user_id,
-      situation: 'has_room',
       region, district, subway_stn,
       rent, maint_fee,
       pref_gender,
       share_rent_type, share_rent_amount,
       share_maint_type, share_maint_amount,
-      no_smoker, no_drink, no_pet,
+      avoid_smoke, avoid_drink, avoid_pet,
       bio,
       profile_agree, location_agree, push_agree, marketing_agree,
       is_active: true,
@@ -83,7 +82,6 @@ router.get('/list', async (req, res) => {
   let query = supabaseAdmin
     .from('sjj_room')
     .select('id, user_id, region, district, subway_stn, rent, maint_fee, pref_gender, share_rent_type, share_rent_amount, share_maint_type, share_maint_amount, bio, sjj_user!user_id(nick, gender, birth)')
-    .eq('situation', 'has_room')
     .eq('is_active', true)
     .order('created_at', { ascending: false })
     .range(offset, offset + Number(limit) - 1);
@@ -140,7 +138,7 @@ router.get('/:id', async (req, res) => {
 
   const { data: prof } = await supabaseAdmin
     .from('sjj_user_prof')
-    .select('job, wfh, sleep_hour, wake_hour, noise_lvl, home_time, clean_freq, drink_freq, smoking, pet, pet_type, pet_type_input, pet_name, pet_memo')
+    .select('job, is_remote, sleep_hour, wake_hour, pers_type, home_time, clean_freq, drink_freq, smoking, pet, pet_type, pet_type_input, pet_name, pet_memo')
     .eq('user_id', data.user_id)
     .single();
 
@@ -164,15 +162,15 @@ router.get('/:id', async (req, res) => {
     share_maint,
     share_total: share_rent != null && share_maint != null ? share_rent + share_maint : null,
     pref_gender: data.pref_gender,
-    no_smoker: data.no_smoker,
-    no_drink: data.no_drink,
-    no_pet: data.no_pet,
+    avoid_smoke: data.avoid_smoke,
+    avoid_drink: data.avoid_drink,
+    avoid_pet: data.avoid_pet,
     bio: data.bio,
     job: prof?.job,
-    wfh: prof?.wfh,
+    is_remote: prof?.is_remote,
     sleep_hour: prof?.sleep_hour,
     wake_hour: prof?.wake_hour,
-    noise_lvl: prof?.noise_lvl,
+    pers_type: prof?.pers_type,
     home_time: prof?.home_time,
     clean_freq: prof?.clean_freq,
     drink_freq: prof?.drink_freq,

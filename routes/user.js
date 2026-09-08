@@ -40,20 +40,20 @@ router.patch('/nick', verifyToken, async (req, res) => {
   res.json({ success: true, nick: nick.trim() });
 });
 
-// POST /api/user/pref — 방 없는 사람 추가정보
+// POST /api/user/pref — 방 없는 사람 희망조건
 router.post('/pref', verifyToken, async (req, res) => {
   const user_id = req.user.id;
   const {
-    // 희망 지역 (sjj_room)
+    // 희망 지역·조건 (sjj_room_pref)
     region, district, subway_stn,
     pref_gender,
-    no_smoker, no_pet, no_drink,
+    avoid_smoke, avoid_drink, avoid_pet,
     bio,
     profile_agree, location_agree, push_agree, marketing_agree,
     // 생활습관 (sjj_user_prof)
-    job, wfh,
+    job, is_remote,
     sleep_hour, wake_hour,
-    noise_lvl, home_time, clean_freq, drink_freq,
+    pers_type, home_time, clean_freq, drink_freq,
     smoking, pet, pet_type, pet_type_input, pet_name, pet_memo,
   } = req.body;
   console.log('[pref] 요청 user_id:', user_id);
@@ -62,9 +62,9 @@ router.post('/pref', verifyToken, async (req, res) => {
     .from('sjj_user_prof')
     .upsert({
       user_id,
-      job, wfh,
+      job, is_remote,
       sleep_hour, wake_hour,
-      noise_lvl, home_time, clean_freq, drink_freq,
+      pers_type, home_time, clean_freq, drink_freq,
       smoking, pet, pet_type, pet_type_input, pet_name, pet_memo,
     }, { onConflict: 'user_id' });
 
@@ -73,21 +73,20 @@ router.post('/pref', verifyToken, async (req, res) => {
     return res.status(500).json({ code: 'PROF_SAVE_FAILED', error: profError.message });
   }
 
-  const { error: roomError } = await supabaseAdmin
-    .from('sjj_room')
+  const { error: prefError } = await supabaseAdmin
+    .from('sjj_room_pref')
     .insert({
       user_id,
-      situation: 'no_room',
       region, district, subway_stn,
       pref_gender,
-      no_smoker, no_drink, no_pet,
+      avoid_smoke, avoid_drink, avoid_pet,
       bio,
       profile_agree, location_agree, push_agree, marketing_agree,
     });
 
-  if (roomError) {
-    console.error('[pref] room 실패:', roomError.message);
-    return res.status(500).json({ code: 'PREF_SAVE_FAILED', error: roomError.message });
+  if (prefError) {
+    console.error('[pref] pref 실패:', prefError.message);
+    return res.status(500).json({ code: 'PREF_SAVE_FAILED', error: prefError.message });
   }
 
   console.log('[pref] 완료');
