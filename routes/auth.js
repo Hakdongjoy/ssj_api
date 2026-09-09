@@ -6,12 +6,25 @@ const generateNick = require('../utils/nick');
 // POST /api/auth/signup
 router.post('/signup', async (req, res) => {
   const { id, password, gender, birth, phone } = req.body;
-  const email = id + '@saljjak.com';
-  console.log('[signup] 요청:', { id, email, gender, birth, phone });
+  console.log('[signup] 요청:', { id, gender, birth, phone });
 
+  if (!id) {
+    return res.status(400).json({ code: 'MISSING_ID', error: '아이디를 입력해주세요' });
+  }
   if (!password || password.length < 8) {
     return res.status(400).json({ code: 'WEAK_PASSWORD', error: '비밀번호는 8자 이상이어야 합니다' });
   }
+  if (!gender) {
+    return res.status(400).json({ code: 'MISSING_GENDER', error: '성별을 선택해주세요' });
+  }
+  if (!birth) {
+    return res.status(400).json({ code: 'MISSING_BIRTH', error: '생년월일을 입력해주세요' });
+  }
+  if (!phone) {
+    return res.status(400).json({ code: 'MISSING_PHONE', error: '휴대폰 번호를 입력해주세요' });
+  }
+
+  const email = id + '@saljjak.com';
 
   const { data, error } = await supabase.auth.signUp({ email, password });
   if (error) {
