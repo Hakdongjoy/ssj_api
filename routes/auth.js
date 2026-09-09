@@ -41,16 +41,33 @@ router.post('/phone/request', async (req, res) => {
     return res.status(400).json({ code: 'INVALID_BIRTH_FORMAT', error: '생년월일·성별 형식이 올바르지 않습니다' });
   }
 
+  const COOLDOWN_MS = 3 * 60 * 1000; // 만료시간과 동일하게 3분
+
+  const { data: existing } = await supabaseAdmin
+    .from('sjj_phone_verify')
+    .select('created_at')
+    .eq('phone', phone)
+    .maybeSingle();
+
+  if (existing) {
+    const elapsed = Date.now() - new Date(existing.created_at).getTime();
+    if (elapsed < COOLDOWN_MS) {
+      const retry_after = Math.ceil((COOLDOWN_MS - elapsed) / 1000);
+      return res.status(429).json({ code: 'TOO_MANY_REQUESTS', error: `잠시 후 다시 시도해주세요 (${retry_after}초 후 가능)`, retry_after });
+    }
+  }
+
   const century = ['1', '2'].includes(gender_code) ? '19' : '20';
   const gender = ['1', '3'].includes(gender_code) ? 'male' : 'female';
   const birth = `${century}${birth6.slice(0, 2)}-${birth6.slice(2, 4)}-${birth6.slice(4, 6)}`;
 
   const code = String(Math.floor(100000 + Math.random() * 900000));
-  const expires_at = new Date(Date.now() + 3 * 60 * 1000).toISOString();
+  const now = new Date().toISOString();
+  const expires_at = new Date(Date.now() + COOLDOWN_MS).toISOString();
 
   const { error } = await supabaseAdmin
     .from('sjj_phone_verify')
-    .upsert({ phone, code, carrier, birth, gender, verified: false, expires_at }, { onConflict: 'phone' });
+    .upsert({ phone, code, carrier, birth, gender, verified: false, expires_at, created_at: now }, { onConflict: 'phone' });
 
   if (error) {
     console.error('[phone/request] 저장 실패:', error.message);
