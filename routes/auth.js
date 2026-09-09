@@ -8,20 +8,19 @@ router.post('/signup', async (req, res) => {
   const { id, password, gender, birth, phone } = req.body;
   console.log('[signup] 요청:', { id, gender, birth, phone });
 
-  if (!id) {
-    return res.status(400).json({ code: 'MISSING_ID', error: '아이디를 입력해주세요' });
+  const missingFields = [];
+  if (!id) missingFields.push('id');
+  if (!password) missingFields.push('password');
+  if (!gender) missingFields.push('gender');
+  if (!birth) missingFields.push('birth');
+  if (!phone) missingFields.push('phone');
+
+  if (missingFields.length > 0) {
+    return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: `필수값이 누락되었습니다: ${missingFields.join(', ')}`, fields: missingFields });
   }
-  if (!password || password.length < 8) {
+
+  if (password.length < 8) {
     return res.status(400).json({ code: 'WEAK_PASSWORD', error: '비밀번호는 8자 이상이어야 합니다' });
-  }
-  if (!gender) {
-    return res.status(400).json({ code: 'MISSING_GENDER', error: '성별을 선택해주세요' });
-  }
-  if (!birth) {
-    return res.status(400).json({ code: 'MISSING_BIRTH', error: '생년월일을 입력해주세요' });
-  }
-  if (!phone) {
-    return res.status(400).json({ code: 'MISSING_PHONE', error: '휴대폰 번호를 입력해주세요' });
   }
 
   const email = id + '@saljjak.com';
