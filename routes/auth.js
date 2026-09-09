@@ -26,16 +26,24 @@ router.get('/check-id', async (req, res) => {
 
 // POST /api/auth/phone/request — 휴대폰 인증번호 발송 (SMS 미연동, 서버 로그에만 출력)
 router.post('/phone/request', async (req, res) => {
-  const { phone, carrier, birth, gender } = req.body;
+  const { phone, carrier, birth6, gender_code } = req.body;
 
   const missingFields = [];
   if (!phone) missingFields.push('phone');
   if (!carrier) missingFields.push('carrier');
-  if (!birth) missingFields.push('birth');
-  if (!gender) missingFields.push('gender');
+  if (!birth6) missingFields.push('birth6');
+  if (!gender_code) missingFields.push('gender_code');
   if (missingFields.length > 0) {
     return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: `필수값이 누락되었습니다: ${missingFields.join(', ')}`, fields: missingFields });
   }
+
+  if (!/^\d{6}$/.test(birth6) || !['1', '2', '3', '4'].includes(gender_code)) {
+    return res.status(400).json({ code: 'INVALID_BIRTH_FORMAT', error: '생년월일·성별 형식이 올바르지 않습니다' });
+  }
+
+  const century = ['1', '2'].includes(gender_code) ? '19' : '20';
+  const gender = ['1', '3'].includes(gender_code) ? 'male' : 'female';
+  const birth = `${century}${birth6.slice(0, 2)}-${birth6.slice(2, 4)}-${birth6.slice(4, 6)}`;
 
   const code = String(Math.floor(100000 + Math.random() * 900000));
   const expires_at = new Date(Date.now() + 3 * 60 * 1000).toISOString();
