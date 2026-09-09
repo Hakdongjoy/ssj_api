@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { supabase, supabaseAdmin } = require('../supabase');
 const generateNick = require('../utils/nick');
+const missingFieldMessage = require('../utils/fieldLabels');
 
 // GET /api/auth/check-id?id=myid123 — 아이디 중복 확인
 router.get('/check-id', async (req, res) => {
@@ -34,7 +35,7 @@ router.post('/phone/request', async (req, res) => {
   if (!birth6) missingFields.push('birth6');
   if (!gender_code) missingFields.push('gender_code');
   if (missingFields.length > 0) {
-    return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: `필수값이 누락되었습니다: ${missingFields.join(', ')}`, fields: missingFields });
+    return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: missingFieldMessage(missingFields), fields: missingFields });
   }
 
   if (!/^\d{6}$/.test(birth6) || !['1', '2', '3', '4'].includes(gender_code)) {
@@ -88,7 +89,7 @@ router.post('/phone/confirm', async (req, res) => {
   if (!phone) missingFields.push('phone');
   if (!code) missingFields.push('code');
   if (missingFields.length > 0) {
-    return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: `필수값이 누락되었습니다: ${missingFields.join(', ')}`, fields: missingFields });
+    return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: missingFieldMessage(missingFields), fields: missingFields });
   }
 
   const { data, error } = await supabaseAdmin
@@ -127,7 +128,7 @@ router.post('/signup', async (req, res) => {
   if (!phone) missingFields.push('phone');
 
   if (missingFields.length > 0) {
-    return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: `필수값이 누락되었습니다: ${missingFields.join(', ')}`, fields: missingFields });
+    return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: missingFieldMessage(missingFields), fields: missingFields });
   }
 
   if (password.length < 8) {
@@ -149,7 +150,7 @@ router.post('/signup', async (req, res) => {
     if (msg.includes('Password')) {
       return res.status(400).json({ code: 'WEAK_PASSWORD', error: '비밀번호는 8자 이상이어야 합니다' });
     }
-    return res.status(400).json({ code: 'SIGNUP_FAILED', error: msg });
+    return res.status(400).json({ code: 'SIGNUP_FAILED', error: '회원가입에 실패했습니다. 잠시 후 다시 시도해주세요' });
   }
 
   const user_id = data.user.id;
@@ -189,7 +190,7 @@ router.post('/login', async (req, res) => {
     if (msg.includes('Email not confirmed')) {
       return res.status(400).json({ code: 'EMAIL_NOT_CONFIRMED', error: '계정 인증이 필요합니다' });
     }
-    return res.status(400).json({ code: 'LOGIN_FAILED', error: msg });
+    return res.status(400).json({ code: 'LOGIN_FAILED', error: '로그인에 실패했습니다. 잠시 후 다시 시도해주세요' });
   }
 
   console.log('[login] 완료 user_id:', data.user.id);
