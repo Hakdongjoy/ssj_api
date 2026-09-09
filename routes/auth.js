@@ -41,7 +41,8 @@ router.post('/phone/request', async (req, res) => {
     return res.status(400).json({ code: 'INVALID_BIRTH_FORMAT', error: '생년월일·성별 형식이 올바르지 않습니다' });
   }
 
-  const COOLDOWN_MS = 3 * 60 * 1000; // 만료시간과 동일하게 3분
+  const COOLDOWN_MS = 5 * 1000; // 개발단계 임시 5초 (TODO: 카톡 인증 등 실제 연동 시 재조정)
+  const EXPIRES_MS = 3 * 60 * 1000;
 
   const { data: existing } = await supabaseAdmin
     .from('sjj_phone_verify')
@@ -63,7 +64,7 @@ router.post('/phone/request', async (req, res) => {
 
   const code = String(Math.floor(100000 + Math.random() * 900000));
   const now = new Date().toISOString();
-  const expires_at = new Date(Date.now() + COOLDOWN_MS).toISOString();
+  const expires_at = new Date(Date.now() + EXPIRES_MS).toISOString();
 
   const { error } = await supabaseAdmin
     .from('sjj_phone_verify')
