@@ -15,7 +15,7 @@ router.get('/check-id', async (req, res) => {
   const { data, error } = await supabaseAdmin
     .from('sjj_user')
     .select('id')
-    .eq('login_id', id)
+    .ilike('login_id', id)
     .maybeSingle();
 
   if (error) {
