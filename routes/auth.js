@@ -57,9 +57,9 @@ router.post('/phone/request', async (req, res) => {
     return res.status(500).json({ code: 'PHONE_VERIFY_SAVE_FAILED', error: '인증번호 발송에 실패했습니다' });
   }
 
-  console.log(`[phone/request] ${phone} 인증번호: ${code}`); // TODO: 실제 SMS 업체 연동 시 이 부분에서 발송
+  console.log(`[phone/request] ${phone} 인증번호: ${code}`); // TODO: 실제 SMS 업체 연동 시 이 부분에서 발송, 아래 code 응답도 제거
 
-  res.json({ success: true });
+  res.json({ success: true, code }); // SMS 미연동 임시 조치 - 실제 발송 붙으면 code는 응답에서 제거
 });
 
 // POST /api/auth/phone/confirm — 휴대폰 인증번호 확인
