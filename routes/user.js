@@ -2,27 +2,12 @@ const express = require('express');
 const router = express.Router();
 const { supabaseAdmin } = require('../supabase');
 const verifyToken = require('../middleware/auth');
-
-const ADJ = ['향기로운','달콤한','귀여운','용감한','신비로운','행복한','졸린','배고픈','빠른','느긋한','차가운','따뜻한','반짝이는','조용한','시끄러운'];
-const NOUN = ['반찬','고양이','강아지','토끼','감자','치킨','라면','두부','김치','사과','망고','오징어','햄버거','붕어빵','만두'];
+const generateNick = require('../utils/nick');
 
 // GET /api/user/nick/random — 인증 불필요
 router.get('/nick/random', async (req, res) => {
-  const adj = ADJ[Math.floor(Math.random() * ADJ.length)];
-  const noun = NOUN[Math.floor(Math.random() * NOUN.length)];
-  const base = `${adj}${noun}`;
-
-  const { data } = await supabaseAdmin
-    .from('sjj_user')
-    .select('nick')
-    .ilike('nick', `${base}%`);
-
-  const existing = new Set((data || []).map(r => r.nick));
-  if (!existing.has(base)) return res.json({ nick: base });
-
-  let n = 2;
-  while (existing.has(`${base}${n}`)) n++;
-  res.json({ nick: `${base}${n}` });
+  const nick = await generateNick();
+  res.json({ nick });
 });
 
 // PATCH /api/user/nick

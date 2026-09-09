@@ -1,12 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const { supabase, supabaseAdmin } = require('../supabase');
+const generateNick = require('../utils/nick');
 
 // POST /api/auth/signup
 router.post('/signup', async (req, res) => {
-  const { id, password, nick, gender, birth, phone } = req.body;
+  const { id, password, gender, birth, phone } = req.body;
   const email = id + '@saljjak.com';
-  console.log('[signup] 요청:', { id, email, nick, gender, birth, phone });
+  console.log('[signup] 요청:', { id, email, gender, birth, phone });
 
   if (!password || password.length < 8) {
     return res.status(400).json({ code: 'WEAK_PASSWORD', error: '비밀번호는 8자 이상이어야 합니다' });
@@ -32,6 +33,8 @@ router.post('/signup', async (req, res) => {
   const access_token = data.session?.access_token;
   console.log('[signup] Step1 성공 user_id:', user_id);
 
+  const nick = await generateNick();
+
   const { error: profileError } = await supabaseAdmin
     .from('sjj_user')
     .update({ nick, gender, birth, phone })
@@ -43,8 +46,8 @@ router.post('/signup', async (req, res) => {
     return res.status(500).json({ code: 'PROFILE_SAVE_FAILED', error: '프로필 저장 실패' });
   }
 
-  console.log('[signup] 완료');
-  res.json({ user_id, access_token });
+  console.log('[signup] 완료, nick:', nick);
+  res.json({ user_id, access_token, nick });
 });
 
 // POST /api/auth/login
