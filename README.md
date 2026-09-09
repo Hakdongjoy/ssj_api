@@ -8,8 +8,6 @@
 - 🌐 **API 서버**: [https://ssj-api.onrender.com](https://ssj-api.onrender.com)
 - 📄 **API 명세서**: [살짝 API Spec](https://claude.ai/code/artifact/2b7e974c-7828-4c6e-9029-e856b791dfac)
 
-> ℹ️ 이 저장소는 위 API 서버의 **소스코드**예요. 이미 배포되어 돌아가고 있어서, 그냥 써보려면 `npm install` 같은 거 안 하고 위 링크만 열면 돼요 🙆 로컬에서 직접 돌려보고 싶을 때만 아래 "시작하기"를 따라해주세요.
-
 ## 🛠️ 기술 스택
 
 - 🟢 **Node.js** + **Express**
@@ -30,25 +28,6 @@ ssj/
 │   └── room.js           # 공고 등록(방 있는 사람)
 └── utils/
     └── nick.js           # 랜덤 닉네임 생성기
-```
-
-## ▶️ 시작하기 (로컬 실행 시)
-
-```bash
-npm install
-```
-
-프로젝트 루트에 `.env` 파일을 만들고 아래 값을 채워주세요.
-
-```env
-SUPABASE_URL=your_supabase_project_url
-SUPABASE_ANON_KEY=your_supabase_anon_key
-SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
-PORT=3000
-```
-
-```bash
-npm start
 ```
 
 ## 📡 API 개요
