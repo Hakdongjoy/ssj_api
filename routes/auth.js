@@ -18,10 +18,10 @@ router.post('/signup', async (req, res) => {
     console.error('[signup] Step1 실패:', error.message);
     const msg = error.message;
     if (msg.includes('already registered') || msg.includes('already been registered')) {
-      return res.status(400).json({ code: 'EMAIL_ALREADY_EXISTS', error: '이미 가입된 이메일입니다' });
+      return res.status(400).json({ code: 'EMAIL_ALREADY_EXISTS', error: '이미 가입된 아이디입니다' });
     }
     if (msg.includes('invalid') && msg.includes('email')) {
-      return res.status(400).json({ code: 'INVALID_EMAIL', error: '이메일 형식이 올바르지 않습니다' });
+      return res.status(400).json({ code: 'INVALID_EMAIL', error: '아이디 형식이 올바르지 않습니다' });
     }
     if (msg.includes('Password')) {
       return res.status(400).json({ code: 'WEAK_PASSWORD', error: '비밀번호는 8자 이상이어야 합니다' });
@@ -61,10 +61,10 @@ router.post('/login', async (req, res) => {
     console.error('[login] 실패:', error.message);
     const msg = error.message;
     if (msg.includes('Invalid login credentials')) {
-      return res.status(400).json({ code: 'INVALID_CREDENTIALS', error: '이메일 또는 비밀번호가 틀렸습니다' });
+      return res.status(400).json({ code: 'INVALID_CREDENTIALS', error: '아이디 또는 비밀번호가 틀렸습니다' });
     }
     if (msg.includes('Email not confirmed')) {
-      return res.status(400).json({ code: 'EMAIL_NOT_CONFIRMED', error: '이메일 인증이 필요합니다' });
+      return res.status(400).json({ code: 'EMAIL_NOT_CONFIRMED', error: '계정 인증이 필요합니다' });
     }
     return res.status(400).json({ code: 'LOGIN_FAILED', error: msg });
   }
