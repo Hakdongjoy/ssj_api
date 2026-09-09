@@ -3,6 +3,35 @@ const router = express.Router();
 const { supabase, supabaseAdmin } = require('../supabase');
 const generateNick = require('../utils/nick');
 
+// GET /api/auth/check-id?id=myid123 — 아이디 중복 확인
+router.get('/check-id', async (req, res) => {
+  const { id } = req.query;
+  if (!id) {
+    return res.status(400).json({ code: 'MISSING_ID', error: '아이디를 입력해주세요' });
+  }
+
+  const email = id + '@saljjak.com';
+  // GoTrue admin API의 email 쿼리 파라미터는 실제로 필터링을 안 해서 전체 목록에서 직접 비교
+  const resp = await fetch(
+    `${process.env.SUPABASE_URL}/auth/v1/admin/users?per_page=1000`,
+    {
+      headers: {
+        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+    }
+  );
+  const data = await resp.json();
+
+  if (!resp.ok) {
+    console.error('[check-id] 조회 실패:', data);
+    return res.status(500).json({ code: 'CHECK_ID_FAILED', error: '아이디 확인 중 오류가 발생했습니다' });
+  }
+
+  const exists = Array.isArray(data.users) && data.users.some(u => u.email === email);
+  res.json({ available: !exists });
+});
+
 // POST /api/auth/signup
 router.post('/signup', async (req, res) => {
   const { id, password, gender, birth, phone } = req.body;
