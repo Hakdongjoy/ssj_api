@@ -16,7 +16,7 @@ router.patch('/nick', verifyToken, async (req, res) => {
   const { nick } = req.body;
 
   if (!nick || nick.trim().length === 0) {
-    return res.status(400).json({ code: 'INVALID_NICK', error: '닉네임을 입력해주세요' });
+    return res.status(400).json({ code: 'INVALID_NICK', error: '필요한 정보를 모두 입력했는지 다시 확인해주세요' });
   }
 
   const { error } = await supabaseAdmin.from('sjj_user').update({ nick: nick.trim() }).eq('id', user_id);

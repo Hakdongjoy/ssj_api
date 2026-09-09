@@ -2,13 +2,14 @@ const express = require('express');
 const router = express.Router();
 const { supabase, supabaseAdmin } = require('../supabase');
 const generateNick = require('../utils/nick');
-const missingFieldMessage = require('../utils/fieldLabels');
+
+const MISSING_FIELD_MESSAGE = '필요한 정보를 모두 입력했는지 다시 확인해주세요';
 
 // GET /api/auth/check-id?id=myid123 — 아이디 중복 확인
 router.get('/check-id', async (req, res) => {
   const { id } = req.query;
   if (!id) {
-    return res.status(400).json({ code: 'MISSING_ID', error: '아이디를 입력해주세요' });
+    return res.status(400).json({ code: 'MISSING_ID', error: MISSING_FIELD_MESSAGE });
   }
 
   const { data, error } = await supabaseAdmin
@@ -35,7 +36,7 @@ router.post('/phone/request', async (req, res) => {
   if (!birth6) missingFields.push('birth6');
   if (!gender_code) missingFields.push('gender_code');
   if (missingFields.length > 0) {
-    return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: missingFieldMessage(missingFields), fields: missingFields });
+    return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: MISSING_FIELD_MESSAGE, fields: missingFields });
   }
 
   if (!/^\d{6}$/.test(birth6) || !['1', '2', '3', '4'].includes(gender_code)) {
@@ -89,7 +90,7 @@ router.post('/phone/confirm', async (req, res) => {
   if (!phone) missingFields.push('phone');
   if (!code) missingFields.push('code');
   if (missingFields.length > 0) {
-    return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: missingFieldMessage(missingFields), fields: missingFields });
+    return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: MISSING_FIELD_MESSAGE, fields: missingFields });
   }
 
   const { data, error } = await supabaseAdmin
@@ -128,7 +129,7 @@ router.post('/signup', async (req, res) => {
   if (!phone) missingFields.push('phone');
 
   if (missingFields.length > 0) {
-    return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: missingFieldMessage(missingFields), fields: missingFields });
+    return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: MISSING_FIELD_MESSAGE, fields: missingFields });
   }
 
   if (password.length < 8) {
