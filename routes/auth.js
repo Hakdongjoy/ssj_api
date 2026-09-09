@@ -93,7 +93,7 @@ router.post('/phone/confirm', async (req, res) => {
 
   await supabaseAdmin.from('sjj_phone_verify').update({ verified: true }).eq('phone', phone);
 
-  res.json({ success: true, gender: data.gender, birth: data.birth });
+  res.json({ success: true });
 });
 
 // POST /api/auth/signup
