@@ -1,16 +1,22 @@
-# 살짝 API
+🏠 살짝 API
 
-룸메이트 매칭 앱 "살짝"의 백엔드 API 서버입니다. 이미 방을 구해서 같이 살 사람을 찾는 사람과, 아직 방이 없어서 함께 구할 사람을 찾는 사람을 이어줍니다.
+룸메이트 매칭 앱 "살짝"의 백엔드 API 서버입니다 💚 이미 방을 구해서 같이 살 사람을 찾는 사람과, 아직 방이 없어서 함께 구할 사람을 찾는 사람을 이어줍니다.
 
-📄 **API 명세서**: [살짝 API Spec](https://claude.ai/code/artifact/2b7e974c-7828-4c6e-9029-e856b791dfac)
+## 🔗 링크
 
-## 기술 스택
+- 📱 **살짝 서비스**: [https://twin-psi-murex.vercel.app](https://twin-psi-murex.vercel.app)
+- 🌐 **API 서버**: [https://ssj-api.onrender.com](https://ssj-api.onrender.com)
+- 📄 **API 명세서**: [살짝 API Spec](https://claude.ai/code/artifact/2b7e974c-7828-4c6e-9029-e856b791dfac)
 
-- **Node.js** + **Express**
-- **Supabase** (PostgreSQL, Auth)
-- **Render** (배포)
+> ℹ️ 이 저장소는 위 API 서버의 **소스코드**예요. 이미 배포되어 돌아가고 있어서, 그냥 써보려면 `npm install` 같은 거 안 하고 위 링크만 열면 돼요 🙆 로컬에서 직접 돌려보고 싶을 때만 아래 "시작하기"를 따라해주세요.
 
-## 프로젝트 구조
+## 🛠️ 기술 스택
+
+- 🟢 **Node.js** + **Express**
+- ⚡ **Supabase** (PostgreSQL, Auth)
+- 🚀 **Render** (배포)
+
+## 📁 프로젝트 구조
 
 ```
 ssj/
@@ -26,7 +32,7 @@ ssj/
     └── nick.js           # 랜덤 닉네임 생성기
 ```
 
-## 시작하기
+## ▶️ 시작하기 (로컬 실행 시)
 
 ```bash
 npm install
@@ -45,7 +51,7 @@ PORT=3000
 npm start
 ```
 
-## API 개요
+## 📡 API 개요
 
 | Method | Endpoint | 인증 | 설명 |
 |---|---|---|---|
@@ -59,14 +65,14 @@ npm start
 | POST | `/api/user/pref` | 🔒 | 추가정보 등록 (방 없는 사람) |
 | POST | `/api/room/register` | 🔒 | 공고 등록 (방 있는 사람) |
 
-인증이 필요한 API는 `Authorization: Bearer <access_token>` 헤더가 필요합니다.
+🔒 표시된 API는 `Authorization: Bearer <access_token>` 헤더가 필요해요.
 
-자세한 요청/응답 형식은 [API 명세서](https://claude.ai/code/artifact/2b7e974c-7828-4c6e-9029-e856b791dfac)를 참고해주세요.
+자세한 요청/응답 형식은 📄 [API 명세서](https://claude.ai/code/artifact/2b7e974c-7828-4c6e-9029-e856b791dfac)를 참고해주세요.
 
-## DB 구조
+## 🗄️ DB 구조
 
-- `sjj_user` — 유저 기본 정보
-- `sjj_user_info` — 유저 추가정보 (생활습관)
-- `sjj_room` — 공고 (방 있는 사람)
-- `sjj_room_pref` — 희망조건 (방 없는 사람)
-- `sjj_phone_verify` — 휴대폰 본인인증
+- 👤 `sjj_user` — 유저 기본 정보
+- 📋 `sjj_user_info` — 유저 추가정보 (생활습관)
+- 🏘️ `sjj_room` — 공고 (방 있는 사람)
+- 🔍 `sjj_room_pref` — 희망조건 (방 없는 사람)
+- 📞 `sjj_phone_verify` — 휴대폰 본인인증
