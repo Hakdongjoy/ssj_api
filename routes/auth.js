@@ -24,6 +24,70 @@ router.get('/check-id', async (req, res) => {
   res.json({ available: !data });
 });
 
+// POST /api/auth/phone/request — 휴대폰 인증번호 발송 (SMS 미연동, 서버 로그에만 출력)
+router.post('/phone/request', async (req, res) => {
+  const { phone, carrier, birth, gender } = req.body;
+
+  const missingFields = [];
+  if (!phone) missingFields.push('phone');
+  if (!carrier) missingFields.push('carrier');
+  if (!birth) missingFields.push('birth');
+  if (!gender) missingFields.push('gender');
+  if (missingFields.length > 0) {
+    return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: `필수값이 누락되었습니다: ${missingFields.join(', ')}`, fields: missingFields });
+  }
+
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  const expires_at = new Date(Date.now() + 3 * 60 * 1000).toISOString();
+
+  const { error } = await supabaseAdmin
+    .from('sjj_phone_verify')
+    .upsert({ phone, code, carrier, birth, gender, verified: false, expires_at }, { onConflict: 'phone' });
+
+  if (error) {
+    console.error('[phone/request] 저장 실패:', error.message);
+    return res.status(500).json({ code: 'PHONE_VERIFY_SAVE_FAILED', error: '인증번호 발송에 실패했습니다' });
+  }
+
+  console.log(`[phone/request] ${phone} 인증번호: ${code}`); // TODO: 실제 SMS 업체 연동 시 이 부분에서 발송
+
+  res.json({ success: true });
+});
+
+// POST /api/auth/phone/confirm — 휴대폰 인증번호 확인
+router.post('/phone/confirm', async (req, res) => {
+  const { phone, code } = req.body;
+
+  const missingFields = [];
+  if (!phone) missingFields.push('phone');
+  if (!code) missingFields.push('code');
+  if (missingFields.length > 0) {
+    return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: `필수값이 누락되었습니다: ${missingFields.join(', ')}`, fields: missingFields });
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('sjj_phone_verify')
+    .select('*')
+    .eq('phone', phone)
+    .maybeSingle();
+
+  if (error || !data) {
+    return res.status(400).json({ code: 'VERIFY_NOT_FOUND', error: '인증 요청 내역이 없습니다' });
+  }
+
+  if (new Date(data.expires_at) < new Date()) {
+    return res.status(400).json({ code: 'VERIFY_EXPIRED', error: '인증번호가 만료되었습니다' });
+  }
+
+  if (data.code !== code) {
+    return res.status(400).json({ code: 'VERIFY_CODE_MISMATCH', error: '인증번호가 일치하지 않습니다' });
+  }
+
+  await supabaseAdmin.from('sjj_phone_verify').update({ verified: true }).eq('phone', phone);
+
+  res.json({ success: true, gender: data.gender, birth: data.birth });
+});
+
 // POST /api/auth/signup
 router.post('/signup', async (req, res) => {
   const { id, password, gender, birth, phone } = req.body;
