@@ -58,12 +58,12 @@ router.post('/pref', verifyToken, async (req, res) => {
 
   const { error: prefError } = await supabaseAdmin
     .from('sjj_room_pref')
-    .insert({
+    .upsert({
       user_id,
       region, district, subway_stn,
       bio,
       profile_agree, location_agree, push_agree, marketing_agree,
-    });
+    }, { onConflict: 'user_id' });
 
   if (prefError) {
     console.error('[pref] pref 실패:', prefError.message);
