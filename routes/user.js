@@ -20,7 +20,10 @@ router.patch('/nick', verifyToken, async (req, res) => {
   }
 
   const { error } = await supabaseAdmin.from('sjj_user').update({ nick: nick.trim() }).eq('id', user_id);
-  if (error) return res.status(500).json({ code: 'NICK_UPDATE_FAILED', error: error.message });
+  if (error) {
+    console.error('[nick] 업데이트 실패:', error.message);
+    return res.status(500).json({ code: 'NICK_UPDATE_FAILED', error: '닉네임 저장에 실패했습니다. 잠시 후 다시 시도해주세요' });
+  }
 
   res.json({ success: true, nick: nick.trim() });
 });
@@ -57,7 +60,7 @@ router.post('/pref', verifyToken, async (req, res) => {
 
   if (profError) {
     console.error('[pref] prof 실패:', profError.message);
-    return res.status(500).json({ code: 'PROF_SAVE_FAILED', error: profError.message });
+    return res.status(500).json({ code: 'PROF_SAVE_FAILED', error: '저장에 실패했습니다. 잠시 후 다시 시도해주세요' });
   }
 
   const { error: prefError } = await supabaseAdmin
@@ -71,7 +74,7 @@ router.post('/pref', verifyToken, async (req, res) => {
 
   if (prefError) {
     console.error('[pref] pref 실패:', prefError.message);
-    return res.status(500).json({ code: 'PREF_SAVE_FAILED', error: prefError.message });
+    return res.status(500).json({ code: 'PREF_SAVE_FAILED', error: '저장에 실패했습니다. 잠시 후 다시 시도해주세요' });
   }
 
   console.log('[pref] 완료');

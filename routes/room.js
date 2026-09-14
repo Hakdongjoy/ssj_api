@@ -40,7 +40,7 @@ router.post('/register', verifyToken, async (req, res) => {
 
   if (profError) {
     console.error('[room/register] prof 실패:', profError.message);
-    return res.status(500).json({ code: 'PROF_SAVE_FAILED', error: profError.message });
+    return res.status(500).json({ code: 'PROF_SAVE_FAILED', error: '저장에 실패했습니다. 잠시 후 다시 시도해주세요' });
   }
 
   const { error: roomError } = await supabaseAdmin
@@ -60,7 +60,7 @@ router.post('/register', verifyToken, async (req, res) => {
 
   if (roomError) {
     console.error('[room/register] room 실패:', roomError.message);
-    return res.status(500).json({ code: 'ROOM_REGISTER_FAILED', error: roomError.message });
+    return res.status(500).json({ code: 'ROOM_REGISTER_FAILED', error: '공고 등록에 실패했습니다. 잠시 후 다시 시도해주세요' });
   }
 
   console.log('[room/register] 완료');
