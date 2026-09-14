@@ -158,12 +158,17 @@ router.post('/signup', async (req, res) => {
   const access_token = data.session?.access_token;
   console.log('[signup] Step1 성공 user_id:', user_id);
 
-  const nick = await generateNick();
-
-  const { error: profileError } = await supabaseAdmin
-    .from('sjj_user')
-    .update({ login_id: id, nick, gender, birth, phone })
-    .eq('id', user_id);
+  let nick, profileError;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    nick = await generateNick();
+    const { error } = await supabaseAdmin
+      .from('sjj_user')
+      .update({ login_id: id, nick, gender, birth, phone })
+      .eq('id', user_id);
+    profileError = error;
+    if (!error || error.code !== '23505') break; // 닉네임 동시 충돌(unique violation)이 아니면 재시도 불필요
+    console.warn(`[signup] 닉네임 충돌, 재시도 (${attempt + 1}/5):`, nick);
+  }
 
   if (profileError) {
     console.error('[signup] Step2 실패:', profileError.message);
