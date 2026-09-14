@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { supabase, supabaseAdmin } = require('../supabase');
-const generateNick = require('../utils/nick');
+const { assignNick } = require('../utils/nick');
+const verifyToken = require('../middleware/auth');
 
 const MISSING_FIELD_MESSAGE = '필요한 정보를 모두 입력했는지 다시 확인해주세요';
 
@@ -158,17 +159,7 @@ router.post('/signup', async (req, res) => {
   const access_token = data.session?.access_token;
   console.log('[signup] Step1 성공 user_id:', user_id);
 
-  let nick, profileError;
-  for (let attempt = 0; attempt < 5; attempt++) {
-    nick = await generateNick();
-    const { error } = await supabaseAdmin
-      .from('sjj_user')
-      .update({ login_id: id, nick, gender, birth, phone })
-      .eq('id', user_id);
-    profileError = error;
-    if (!error || error.code !== '23505') break; // 닉네임 동시 충돌(unique violation)이 아니면 재시도 불필요
-    console.warn(`[signup] 닉네임 충돌, 재시도 (${attempt + 1}/5):`, nick);
-  }
+  const { nick, error: profileError } = await assignNick(user_id, { login_id: id, gender, birth, phone });
 
   if (profileError) {
     console.error('[signup] Step2 실패:', profileError.message);
@@ -204,6 +195,40 @@ router.post('/login', async (req, res) => {
     user_id: data.user.id,
     access_token: data.session.access_token,
   });
+});
+
+// POST /api/auth/social/complete — SNS(카카오 등) 로그인 후 프로필 초기화 및 완성도 확인
+router.post('/social/complete', verifyToken, async (req, res) => {
+  const user_id = req.user.id;
+
+  const { data: user, error } = await supabaseAdmin
+    .from('sjj_user')
+    .select('nick, gender, birth, phone')
+    .eq('id', user_id)
+    .single();
+
+  if (error) {
+    console.error('[social/complete] 조회 실패:', error.message);
+    return res.status(500).json({ code: 'PROFILE_FETCH_FAILED', error: '프로필 조회에 실패했습니다. 잠시 후 다시 시도해주세요' });
+  }
+
+  let nick = user.nick;
+  if (!nick) {
+    const result = await assignNick(user_id);
+    if (result.error) {
+      console.error('[social/complete] 닉네임 저장 실패:', result.error.message);
+      return res.status(500).json({ code: 'NICK_SAVE_FAILED', error: '닉네임 저장에 실패했습니다. 잠시 후 다시 시도해주세요' });
+    }
+    nick = result.nick;
+  }
+
+  const missing_fields = [];
+  if (!user.gender) missing_fields.push('gender');
+  if (!user.birth) missing_fields.push('birth');
+  if (!user.phone) missing_fields.push('phone');
+
+  console.log('[social/complete] user_id:', user_id, 'nick:', nick, 'missing:', missing_fields);
+  res.json({ user_id, nick, needs_profile: missing_fields.length > 0, missing_fields });
 });
 
 module.exports = router;

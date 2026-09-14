@@ -22,4 +22,22 @@ async function generateNick() {
   return `${base}${n}`;
 }
 
+// user_id에 유니크한 닉네임을 생성해서 저장 (충돌 시 최대 5회 재시도). extraFields는 nick과 함께 저장할 다른 컬럼
+async function assignNick(user_id, extraFields = {}) {
+  let nick, error;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    nick = await generateNick();
+    const { error: updateError } = await supabaseAdmin
+      .from('sjj_user')
+      .update({ nick, ...extraFields })
+      .eq('id', user_id);
+    error = updateError;
+    if (!error || error.code !== '23505') break; // 닉네임 충돌(unique violation)이 아니면 재시도 불필요
+    console.warn(`[assignNick] 닉네임 충돌, 재시도 (${attempt + 1}/5):`, nick);
+  }
+  return { nick, error };
+}
+
 module.exports = generateNick;
+module.exports.generateNick = generateNick;
+module.exports.assignNick = assignNick;
