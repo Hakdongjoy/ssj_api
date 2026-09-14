@@ -41,6 +41,10 @@ router.post('/pref', verifyToken, async (req, res) => {
   } = req.body;
   console.log('[pref] 요청 user_id:', user_id);
 
+  if (profile_agree !== true) {
+    return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: '필요한 정보를 모두 입력했는지 다시 확인해주세요', fields: ['profile_agree'] });
+  }
+
   const { error: profError } = await supabaseAdmin
     .from('sjj_user_info')
     .upsert({
