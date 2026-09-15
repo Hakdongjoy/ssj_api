@@ -92,7 +92,7 @@ router.get('/list', optionalAuth, async (req, res) => {
 
   let query = supabaseAdmin
     .from('sjj_room')
-    .select('id, user_id, region, district, subway_stn, rent, maint_fee, pref_gender, restrict_gender, share_rent_type, share_rent_amount, share_maint_type, share_maint_amount, bio, sjj_user!user_id(nick, gender, birth)')
+    .select('id, user_id, region, district, subway_stn, rent, maint_fee, pref_gender, restrict_gender, share_rent_type, share_rent_amount, share_maint_type, share_maint_amount, sjj_user!user_id(nick, gender, birth)')
     .eq('is_active', true)
     .order('created_at', { ascending: false })
     .range(offset, offset + Number(limit) - 1);
@@ -132,11 +132,7 @@ router.get('/list', optionalAuth, async (req, res) => {
       district: r.district,
       subway_stn: r.subway_stn,
       pref_gender: r.pref_gender,
-      restrict_gender: r.restrict_gender,
-      share_rent,
-      share_maint,
       share_total: share_rent != null && share_maint != null ? share_rent + share_maint : null,
-      bio: r.bio,
     };
   });
 
@@ -168,7 +164,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
 
   const { data: prof } = await supabaseAdmin
     .from('sjj_user_info')
-    .select('job, job_input, is_remote, sleep_hour, wake_hour, pers_type, home_time, clean_freq, drink_freq, smoking, pet, pet_type, pet_type_input, pet_name, pet_memo')
+    .select('job, sleep_hour, wake_hour, pers_type, home_time, clean_freq, drink_freq, smoking')
     .eq('user_id', data.user_id)
     .single();
 
@@ -192,14 +188,11 @@ router.get('/:id', optionalAuth, async (req, res) => {
     share_maint,
     share_total: share_rent != null && share_maint != null ? share_rent + share_maint : null,
     pref_gender: data.pref_gender,
-    restrict_gender: data.restrict_gender,
     avoid_smoke: data.avoid_smoke,
     avoid_drink: data.avoid_drink,
     avoid_pet: data.avoid_pet,
     bio: data.bio,
     job: prof?.job,
-    job_input: prof?.job_input,
-    is_remote: prof?.is_remote,
     sleep_hour: prof?.sleep_hour,
     wake_hour: prof?.wake_hour,
     pers_type: prof?.pers_type,
@@ -207,11 +200,6 @@ router.get('/:id', optionalAuth, async (req, res) => {
     clean_freq: prof?.clean_freq,
     drink_freq: prof?.drink_freq,
     smoking: prof?.smoking,
-    pet: prof?.pet,
-    pet_type: prof?.pet_type,
-    pet_type_input: prof?.pet_type_input,
-    pet_name: prof?.pet_name,
-    pet_memo: prof?.pet_memo,
   });
 });
 
