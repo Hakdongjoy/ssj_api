@@ -92,7 +92,7 @@ router.get('/list', optionalAuth, async (req, res) => {
 
   let query = supabaseAdmin
     .from('sjj_room')
-    .select('id, user_id, region, district, subway_stn, rent, maint_fee, pref_gender, restrict_gender, share_rent_type, share_rent_amount, share_maint_type, share_maint_amount, sjj_user!user_id(nick, gender, birth)')
+    .select('id, user_id, region, district, subway_stn, rent, maint_fee, pref_gender, restrict_gender, share_rent_type, share_rent_amount, share_maint_type, share_maint_amount, sjj_user!user_id(nick, gender, birth)', { count: 'exact' })
     .eq('is_active', true)
     .order('created_at', { ascending: false })
     .range(offset, offset + Number(limit) - 1);
@@ -106,7 +106,7 @@ router.get('/list', optionalAuth, async (req, res) => {
 
   if (region) query = query.ilike('region', `${region}%`);
 
-  const { data, error } = await query;
+  const { data, error, count } = await query;
   if (error) return res.status(500).json({ code: 'LIST_FETCH_FAILED', error: '목록 조회에 실패했습니다. 잠시 후 다시 시도해주세요' });
 
   const userIds = data.map(r => r.user_id);
@@ -136,7 +136,12 @@ router.get('/list', optionalAuth, async (req, res) => {
     };
   });
 
-  res.json({ total: data.length, page: Number(page), list });
+  res.json({
+    total: count ?? data.length,
+    page: Number(page),
+    has_more: offset + data.length < (count ?? 0),
+    list,
+  });
 });
 
 // GET /api/room/:id — 인증 선택 (있으면 조회자 성별로 제한 공고 필터링)
