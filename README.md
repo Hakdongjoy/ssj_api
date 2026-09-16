@@ -23,9 +23,9 @@ ssj/
 ├── middleware/
 │   └── auth.js           # JWT 토큰 검증 미들웨어
 ├── routes/
-│   ├── auth.js           # 회원가입 / 로그인 / 휴대폰 인증 / 아이디 중복확인
+│   ├── auth.js           # 회원가입 / 로그인 / SNS 로그인 / 휴대폰 인증 / 아이디 중복확인
 │   ├── user.js           # 닉네임 / 추가정보(방 없는 사람)
-│   └── room.js           # 공고 등록(방 있는 사람)
+│   └── room.js           # 공고 등록·목록·상세(방 있는 사람)
 └── utils/
     └── nick.js           # 랜덤 닉네임 생성기
 ```
@@ -39,10 +39,13 @@ ssj/
 | POST | `/api/auth/phone/confirm` | - | 휴대폰 인증번호 확인 |
 | POST | `/api/auth/signup` | - | 회원가입 |
 | POST | `/api/auth/login` | - | 로그인 |
+| POST | `/api/auth/social/complete` | 🔒 | SNS(카카오) 로그인 후 프로필 완성 확인 |
 | GET | `/api/user/nick/random` | - | 랜덤 닉네임 생성 |
 | PATCH | `/api/user/nick` | 🔒 | 닉네임 수정 |
 | POST | `/api/user/pref` | 🔒 | 추가정보 등록 (방 없는 사람) |
 | POST | `/api/room/register` | 🔒 | 공고 등록 (방 있는 사람) |
+| GET | `/api/room/list` | - | 공고 목록 (무한스크롤, 최초 7개) |
+| GET | `/api/room/:id` | - | 공고 상세 |
 
 🔒 표시된 API는 `Authorization: Bearer <access_token>` 헤더가 필요해요.
 
