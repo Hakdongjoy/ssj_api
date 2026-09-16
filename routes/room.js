@@ -84,25 +84,12 @@ router.get('/list', optionalAuth, async (req, res) => {
   const { region, page = 1, limit = 7 } = req.query;
   const offset = (Number(page) - 1) * Number(limit);
 
-  let viewerGender = null;
-  if (req.user) {
-    const { data: viewer } = await supabaseAdmin.from('sjj_user').select('gender').eq('id', req.user.id).single();
-    viewerGender = viewer?.gender || null;
-  }
-
   let query = supabaseAdmin
     .from('sjj_room')
     .select('id, user_id, region, district, subway_stn, rent, maint_fee, pref_gender, restrict_gender, share_rent_type, share_rent_amount, share_maint_type, share_maint_amount, sjj_user!user_id(nick, gender, birth)', { count: 'exact' })
     .eq('is_active', true)
     .order('created_at', { ascending: false })
     .range(offset, offset + Number(limit) - 1);
-
-  // restrict_gender=true인 공고는 pref_gender와 일치하는 조회자에게만 노출 (비로그인/성별 불일치면 숨김)
-  if (viewerGender) {
-    query = query.or(`restrict_gender.eq.false,restrict_gender.is.null,pref_gender.eq.${viewerGender}`);
-  } else {
-    query = query.or('restrict_gender.eq.false,restrict_gender.is.null');
-  }
 
   if (region) query = query.ilike('region', `${region}%`);
 
@@ -163,7 +150,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
       viewerGender = viewer?.gender || null;
     }
     if (viewerGender !== data.pref_gender) {
-      return res.status(404).json({ code: 'ROOM_NOT_FOUND', error: '공고를 찾을 수 없습니다' });
+      return res.json({ id: data.id, locked: true, message: '특정 성별에게만 공개된 공고입니다' });
     }
   }
 
@@ -179,6 +166,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
 
   res.json({
     id: data.id,
+    locked: false,
     nick: user?.nick,
     gender: user?.gender,
     age: calcAge(user?.birth),
