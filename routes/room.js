@@ -79,9 +79,9 @@ router.post('/register', verifyToken, async (req, res) => {
   res.json({ success: true });
 });
 
-// GET /api/room/list?region=서울&page=1&limit=20 — 인증 선택 (있으면 조회자 성별로 제한 공고 필터링)
+// GET /api/room/list?region=서울&page=1&limit=7 — 인증 선택 (있으면 조회자 성별로 제한 공고 필터링)
 router.get('/list', optionalAuth, async (req, res) => {
-  const { region, page = 1, limit = 20 } = req.query;
+  const { region, page = 1, limit = 7 } = req.query;
   const offset = (Number(page) - 1) * Number(limit);
 
   let viewerGender = null;
