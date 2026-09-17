@@ -82,14 +82,15 @@ router.post('/register', verifyToken, async (req, res) => {
 // GET /api/room/list?region=서울&page=1&limit=7 — 인증 선택 (있으면 조회자 성별로 제한 공고 필터링)
 router.get('/list', optionalAuth, async (req, res) => {
   const { region, page = 1, limit = 7 } = req.query;
-  const offset = (Number(page) - 1) * Number(limit);
+  const safeLimit = Math.min(Number(limit) || 7, 50);
+  const offset = (Number(page) - 1) * safeLimit;
 
   let query = supabaseAdmin
     .from('sjj_room')
     .select('id, user_id, region, district, subway_stn, rent, maint_fee, pref_gender, restrict_gender, share_rent_type, share_rent_amount, share_maint_type, share_maint_amount, sjj_user!user_id(nick, gender, birth)', { count: 'exact' })
     .eq('is_active', true)
     .order('created_at', { ascending: false })
-    .range(offset, offset + Number(limit) - 1);
+    .range(offset, offset + safeLimit - 1);
 
   if (region) query = query.ilike('region', `${region}%`);
 
