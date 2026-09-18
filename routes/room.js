@@ -79,9 +79,9 @@ router.post('/register', verifyToken, async (req, res) => {
   res.json({ success: true });
 });
 
-// GET /api/room/list?region=서울&page=1&limit=7 — 인증 선택 (있으면 조회자 성별로 제한 공고 필터링)
+// GET /api/room/list?region=서울&district=성북구&page=1&limit=7 — 인증 선택 (있으면 조회자 성별로 제한 공고 필터링)
 router.get('/list', optionalAuth, async (req, res) => {
-  const { region, page = 1, limit = 7 } = req.query;
+  const { region, district, page = 1, limit = 7 } = req.query;
   const safeLimit = Math.min(Number(limit) || 7, 50);
   const offset = (Number(page) - 1) * safeLimit;
 
@@ -93,6 +93,7 @@ router.get('/list', optionalAuth, async (req, res) => {
     .range(offset, offset + safeLimit - 1);
 
   if (region) query = query.ilike('region', `${region}%`);
+  if (district) query = query.ilike('district', `${district}%`);
 
   const { data, error, count } = await query;
   if (error) return res.status(500).json({ code: 'LIST_FETCH_FAILED', error: '목록 조회에 실패했습니다. 잠시 후 다시 시도해주세요' });
