@@ -79,6 +79,56 @@ router.post('/register', verifyToken, async (req, res) => {
   res.json({ success: true });
 });
 
+// GET /api/room/region_cnt — 광역/시군구별 활성 공고 개수 (지역선택 모달용)
+router.get('/region_cnt', async (req, res) => {
+  const { data: regions, error: regionError } = await supabaseAdmin
+    .from('sjj_region')
+    .select('id, name')
+    .order('sort_order');
+
+  const { data: districts, error: districtError } = await supabaseAdmin
+    .from('sjj_district')
+    .select('region_id, name')
+    .order('sort_order');
+
+  if (regionError || districtError) {
+    return res.status(500).json({ code: 'REGION_CNT_FAILED', error: '지역 목록 조회에 실패했습니다. 잠시 후 다시 시도해주세요' });
+  }
+
+  const { data: rooms, error: roomError } = await supabaseAdmin
+    .from('sjj_room')
+    .select('region, district')
+    .eq('is_active', true);
+
+  if (roomError) {
+    return res.status(500).json({ code: 'REGION_CNT_FAILED', error: '지역 목록 조회에 실패했습니다. 잠시 후 다시 시도해주세요' });
+  }
+
+  const countMap = {};
+  for (const r of rooms) {
+    countMap[r.region] = (countMap[r.region] || 0) + 1;
+    const key = `${r.region}|${r.district}`;
+    countMap[key] = (countMap[key] || 0) + 1;
+  }
+
+  const districtsByRegion = {};
+  for (const d of districts) {
+    if (!districtsByRegion[d.region_id]) districtsByRegion[d.region_id] = [];
+    districtsByRegion[d.region_id].push(d.name);
+  }
+
+  const result = regions.map(r => ({
+    region: r.name,
+    count: countMap[r.name] || 0,
+    districts: (districtsByRegion[r.id] || []).map(name => ({
+      district: name,
+      count: countMap[`${r.name}|${name}`] || 0,
+    })),
+  }));
+
+  res.json({ regions: result });
+});
+
 // GET /api/room/list?region=서울&district=성북구&page=1&limit=7 — 인증 선택 (있으면 조회자 성별로 제한 공고 필터링)
 router.get('/list', optionalAuth, async (req, res) => {
   const { region, district, page = 1, limit = 7 } = req.query;
