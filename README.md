@@ -44,6 +44,7 @@ ssj/
 | PATCH | `/api/user/nick` | 🔒 | 닉네임 수정 |
 | POST | `/api/user/pref` | 🔒 | 추가정보 등록 (방 없는 사람) |
 | POST | `/api/room/register` | 🔒 | 공고 등록 (방 있는 사람) |
+| GET | `/api/room/region_cnt` | - | 광역/시군구별 공고 개수 (지역선택용) |
 | GET | `/api/room/list` | - | 공고 목록 (무한스크롤, 최초 7개) |
 | GET | `/api/room/:id` | - | 공고 상세 |
 
@@ -58,3 +59,4 @@ ssj/
 - 🏘️ `sjj_room` — 공고 (방 있는 사람)
 - 🔍 `sjj_room_pref` — 희망조건 (방 없는 사람)
 - 📞 `sjj_phone_verify` — 휴대폰 본인인증
+- 🗺️ `sjj_region` / `sjj_district` — 광역/시군구 마스터
