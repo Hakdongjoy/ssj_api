@@ -17,12 +17,12 @@ function calcShare(fullAmt, type, customAmt) {
 
 // negotiate 타입은 금액 대신 '조율' 텍스트로 노출
 function formatShare(amount, type) {
-  if (type === 'negotiate') return '조율';
+  if (type === 'negotiate') return '직접조율';
   return amount;
 }
 
 function calcShareTotal(rentShare, maintShare, rentType, maintType) {
-  if (rentType === 'negotiate' || maintType === 'negotiate') return '조율';
+  if (rentType === 'negotiate' || maintType === 'negotiate') return '직접조율';
   if (rentShare != null && maintShare != null) return rentShare + maintShare;
   return null;
 }
