@@ -15,6 +15,18 @@ function calcShare(fullAmt, type, customAmt) {
   return null; // negotiate → 직접조율, 고정값 없음
 }
 
+// negotiate 타입은 금액 대신 '조율' 텍스트로 노출
+function formatShare(amount, type) {
+  if (type === 'negotiate') return '조율';
+  return amount;
+}
+
+function calcShareTotal(rentShare, maintShare, rentType, maintType) {
+  if (rentType === 'negotiate' || maintType === 'negotiate') return '조율';
+  if (rentShare != null && maintShare != null) return rentShare + maintShare;
+  return null;
+}
+
 // POST /api/room/register — 방 있는 사람 공고 등록
 router.post('/register', verifyToken, async (req, res) => {
   const user_id = req.user.id;
@@ -171,7 +183,7 @@ router.get('/list', optionalAuth, async (req, res) => {
       district: r.district,
       subway_stn: r.subway_stn,
       pref_gender: r.pref_gender,
-      share_total: share_rent != null && share_maint != null ? share_rent + share_maint : null,
+      share_total: calcShareTotal(share_rent, share_maint, r.share_rent_type, r.share_maint_type),
     };
   });
 
@@ -228,10 +240,10 @@ router.get('/:id', optionalAuth, async (req, res) => {
     rent: data.rent,
     maint_fee: data.maint_fee,
     share_rent_type: data.share_rent_type,
-    share_rent,
+    share_rent: formatShare(share_rent, data.share_rent_type),
     share_maint_type: data.share_maint_type,
-    share_maint,
-    share_total: share_rent != null && share_maint != null ? share_rent + share_maint : null,
+    share_maint: formatShare(share_maint, data.share_maint_type),
+    share_total: calcShareTotal(share_rent, share_maint, data.share_rent_type, data.share_maint_type),
     pref_gender: data.pref_gender,
     avoid_smoke: data.avoid_smoke,
     avoid_drink: data.avoid_drink,
