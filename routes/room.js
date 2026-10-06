@@ -33,22 +33,35 @@ const REGION_TO_METRO = {
   '부산': '부산', '대구': '대구', '광주': '광주', '대전': '대전',
 };
 
+// 마스터 데이터(sjj_subway_station)는 노선마다 역명 표기가 제각각 — "역" 접미사 유무, "역명(병기명)",
+// "경성대·부경대" 같은 가운뎃점, 소스 엑셀 자체의 오타(따옴표 등)가 섞여 있어서 정규화 후 비교
+function normalizeStationName(name) {
+  return name
+    .replace(/["']/g, '')
+    .replace(/\(.*?\)/g, '')
+    .replace(/[·\s]/g, '')
+    .replace(/역$/, '')
+    .trim();
+}
+
 async function resolveSubwayLine(region, subway_stn) {
   if (!subway_stn) return null;
   const metro = REGION_TO_METRO[region];
   if (!metro) return null;
 
-  // 마스터 데이터(sjj_subway_station)는 역명에 "역" 접미사가 없음 (예: "강남"), 입력값은 "강남역"으로 들어오므로 떼고 매칭
-  const stationName = subway_stn.endsWith('역') ? subway_stn.slice(0, -1) : subway_stn;
+  const target = normalizeStationName(subway_stn);
+  if (!target) return null;
 
   const { data } = await supabaseAdmin
     .from('sjj_subway_station')
-    .select('line_nm')
-    .eq('region_cd', metro)
-    .eq('station_nm', stationName);
+    .select('line_nm, station_nm')
+    .eq('region_cd', metro);
 
-  if (!data || data.length === 0) return null;
-  const names = data.map(d => d.line_nm.replace(/\s+/g, ' ').trim());
+  if (!data) return null;
+  const matched = data.filter(d => normalizeStationName(d.station_nm) === target);
+  if (matched.length === 0) return null;
+
+  const names = matched.map(d => d.line_nm.replace(/\s+/g, ' ').trim());
   return [...new Set(names)].join(', ');
 }
 
