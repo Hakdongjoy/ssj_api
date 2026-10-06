@@ -27,6 +27,31 @@ function calcShareTotal(rentShare, maintShare, rentType, maintType) {
   return null;
 }
 
+// 공고의 region(서울/경기/인천 등) → sjj_subway_station.region_cd 매핑. 도시철도 없는 지역은 매핑 없음(null)
+const REGION_TO_METRO = {
+  '서울': '수도권', '경기': '수도권', '인천': '수도권',
+  '부산': '부산', '대구': '대구', '광주': '광주', '대전': '대전',
+};
+
+async function resolveSubwayLine(region, subway_stn) {
+  if (!subway_stn) return null;
+  const metro = REGION_TO_METRO[region];
+  if (!metro) return null;
+
+  // 마스터 데이터(sjj_subway_station)는 역명에 "역" 접미사가 없음 (예: "강남"), 입력값은 "강남역"으로 들어오므로 떼고 매칭
+  const stationName = subway_stn.endsWith('역') ? subway_stn.slice(0, -1) : subway_stn;
+
+  const { data } = await supabaseAdmin
+    .from('sjj_subway_station')
+    .select('line_nm')
+    .eq('region_cd', metro)
+    .eq('station_nm', stationName);
+
+  if (!data || data.length === 0) return null;
+  const names = data.map(d => d.line_nm.replace(/\s+/g, ' ').trim());
+  return [...new Set(names)].join(', ');
+}
+
 // POST /api/room/register — 방 있는 사람 공고 등록
 router.post('/register', verifyToken, async (req, res) => {
   const user_id = req.user.id;
@@ -67,11 +92,13 @@ router.post('/register', verifyToken, async (req, res) => {
     return res.status(500).json({ code: 'PROF_SAVE_FAILED', error: '저장에 실패했습니다. 잠시 후 다시 시도해주세요' });
   }
 
+  const subway_line = await resolveSubwayLine(region, subway_stn);
+
   const { error: roomError } = await supabaseAdmin
     .from('sjj_room')
     .insert({
       user_id,
-      region, district, subway_stn,
+      region, district, subway_stn, subway_line,
       rent, maint_fee,
       pref_gender, restrict_gender,
       share_rent_type, share_rent_amount,
@@ -149,7 +176,7 @@ router.get('/list', optionalAuth, async (req, res) => {
 
   let query = supabaseAdmin
     .from('sjj_room')
-    .select('id, user_id, region, district, subway_stn, rent, maint_fee, pref_gender, restrict_gender, share_rent_type, share_rent_amount, share_maint_type, share_maint_amount, sjj_user!user_id(nick, gender, birth)', { count: 'exact' })
+    .select('id, user_id, region, district, subway_stn, subway_line, rent, maint_fee, pref_gender, restrict_gender, share_rent_type, share_rent_amount, share_maint_type, share_maint_amount, sjj_user!user_id(nick, gender, birth)', { count: 'exact' })
     .eq('is_active', true)
     .order('created_at', { ascending: false })
     .range(offset, offset + safeLimit - 1);
@@ -182,6 +209,7 @@ router.get('/list', optionalAuth, async (req, res) => {
       region: r.region,
       district: r.district,
       subway_stn: r.subway_stn,
+      subway_line: r.subway_line,
       pref_gender: r.pref_gender,
       share_total: calcShareTotal(share_rent, share_maint, r.share_rent_type, r.share_maint_type),
     };
@@ -237,6 +265,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
     region: data.region,
     district: data.district,
     subway_stn: data.subway_stn,
+    subway_line: data.subway_line,
     rent: data.rent,
     maint_fee: data.maint_fee,
     share_rent_type: data.share_rent_type,
