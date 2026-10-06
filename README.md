@@ -60,3 +60,4 @@ ssj/
 - 🔍 `sjj_room_pref` — 희망조건 (방 없는 사람)
 - 📞 `sjj_phone_verify` — 휴대폰 본인인증
 - 🗺️ `sjj_region` / `sjj_district` — 광역/시군구 마스터
+- 🚇 `sjj_subway_station` — 지하철 역-호선 마스터
