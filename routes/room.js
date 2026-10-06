@@ -39,7 +39,7 @@ function normalizeStationName(name) {
   return name
     .replace(/["']/g, '')
     .replace(/\(.*?\)/g, '')
-    .replace(/[·\s]/g, '')
+    .replace(/[·.\s]/g, '')
     .replace(/역$/, '')
     .trim();
 }
