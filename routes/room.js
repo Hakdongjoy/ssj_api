@@ -220,18 +220,21 @@ router.get('/region_cnt', async (req, res) => {
   res.json({ regions: result });
 });
 
-// GET /api/room/station-search?q=강남&limit=20 — 가까운 역 검색 자동완성
+// GET /api/room/station-search?q=강남&region=서울&limit=20 — 가까운 역 검색 자동완성. region 주면 정확히 그 지역 역만
 router.get('/station-search', async (req, res) => {
-  const { q, limit = 20 } = req.query;
+  const { q, region, limit = 20 } = req.query;
   if (!q) return res.json({ stations: [] });
 
   const safeLimit = Math.min(Number(limit) || 20, 50);
   const pattern = `${q}%`;
 
-  const { data: subwayRows } = await supabaseAdmin
+  let query = supabaseAdmin
     .from('sjj_subway_station')
     .select('region_cd, line_nm, station_nm')
     .ilike('station_nm', pattern);
+  if (region) query = query.eq('region_cd', region);
+
+  const { data: subwayRows } = await query;
 
   const groups = {}; // key: region_cd + '|' + normalizeStationName(station_nm)
   const addRow = (row) => {
