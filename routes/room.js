@@ -233,14 +233,17 @@ router.get('/station-search', async (req, res) => {
     supabaseAdmin.from('sjj_ktx_station').select('region_cd, line_nm, station_nm').ilike('station_nm', pattern),
   ]);
 
-  const groups = {}; // key: region_cd + '|' + normalizeStationName(station_nm)
+  const groups = {}; // key: (그룹핑용 지역버킷) + '|' + normalizeStationName(station_nm)
   const addRow = (row, isKtx) => {
     const norm = normalizeStationName(row.station_nm);
     if (!norm) return;
-    const key = `${row.region_cd}|${norm}`;
+    // KTX는 지하철이 있는 권역(서울/경기/인천→수도권, 부산/대구/광주/대전)이면 같은 그룹으로 묶어서
+    // "서울역" 같은 역이 지하철/KTX 따로 안 나오게 함. 지하철 없는 지역은 KTX 고유 지역명 그대로 유지
+    const groupRegion = isKtx ? (REGION_TO_METRO[row.region_cd] || row.region_cd) : row.region_cd;
+    const key = `${groupRegion}|${norm}`;
     if (!groups[key]) {
       const displayName = row.station_nm.endsWith('역') ? row.station_nm : `${row.station_nm}역`;
-      groups[key] = { name: displayName, region: row.region_cd, slugs: new Set() };
+      groups[key] = { name: displayName, region: groupRegion, slugs: new Set() };
     }
     groups[key].slugs.add(isKtx ? 'ktx' : toSlug(row.line_nm.replace(/\s+/g, ' ').trim(), row.region_cd));
   };
