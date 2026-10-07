@@ -27,14 +27,44 @@ function calcShareTotal(rentShare, maintShare, rentType, maintType) {
   return null;
 }
 
+// DB엔 콤마로 이어붙인 slug 문자열로 저장, 응답에선 배열로 변환
+function parseSubwayLine(subway_line) {
+  return subway_line ? subway_line.split(',') : [];
+}
+
 // 공고의 region(서울/경기/인천 등) → sjj_subway_station.region_cd 매핑. 도시철도 없는 지역은 매핑 없음(null)
 const REGION_TO_METRO = {
   '서울': '수도권', '경기': '수도권', '인천': '수도권',
   '부산': '부산', '대구': '대구', '광주': '광주', '대전': '대전',
 };
 
+// line_nm(한글) → 프론트 아이콘 키(slug). 수도권/KTX는 아이콘 확인 완료, 그 외 지역은 추정값(확인 필요)
+const LINE_SLUG_MAP = {
+  '공항철도': 'airport_railroad', '에버라인': 'everline', '김포골드라인': 'gimpo_goldline',
+  'GTX-A': 'gtx_a', '경춘선': 'gyeongchun', '경강선': 'gyeonggang', '경의중앙선': 'gyeongui_jungang',
+  '인천 1호선': 'incheon_1', '인천 2호선': 'incheon_2', '서해선': 'seohae',
+  '신림선': 'sillim', '신분당선': 'sinbundang', '수인분당선': 'suin_bundang',
+  '우이신설선': 'ui_sinseol', '의정부경전철': 'uijeongbu',
+  // 아래는 아이콘 미확인 - 추정값
+  '부산김해경전철': 'busan_gimhae', '동해선': 'donghae', '대경선': 'daegyeong', '자기부상철도': 'maglev',
+};
+
+// 1~9호선은 지역별로 접두어가 다름 (서울/부산/대구/광주/대전 각각 1호선이 있어서)
+const NUMBERED_LINE_PREFIX = {
+  '수도권': 'seoul', '부산': 'busan', '대구': 'daegu', '광주': 'gwangju', '대전': 'daejeon',
+};
+
+function toSlug(lineNm, metro) {
+  const m = lineNm.match(/^([1-9])호선$/);
+  if (m) {
+    const prefix = NUMBERED_LINE_PREFIX[metro] || metro;
+    return `${prefix}_${m[1]}`;
+  }
+  return LINE_SLUG_MAP[lineNm] || lineNm;
+}
+
 // 마스터 데이터(sjj_subway_station)는 노선마다 역명 표기가 제각각 — "역" 접미사 유무, "역명(병기명)",
-// "경성대·부경대" 같은 가운뎃점, 소스 엑셀 자체의 오타(따옴표 등)가 섞여 있어서 정규화 후 비교
+// "경성대·부경대" 같은 가운뎃점/마침표, 소스 엑셀 자체의 오타(따옴표 등)가 섞여 있어서 정규화 후 비교
 function normalizeStationName(name) {
   return name
     .replace(/["']/g, '')
@@ -46,23 +76,32 @@ function normalizeStationName(name) {
 
 async function resolveSubwayLine(region, subway_stn) {
   if (!subway_stn) return null;
-  const metro = REGION_TO_METRO[region];
-  if (!metro) return null;
-
   const target = normalizeStationName(subway_stn);
   if (!target) return null;
 
-  const { data } = await supabaseAdmin
-    .from('sjj_subway_station')
-    .select('line_nm, station_nm')
-    .eq('region_cd', metro);
+  const slugs = new Set();
 
-  if (!data) return null;
-  const matched = data.filter(d => normalizeStationName(d.station_nm) === target);
-  if (matched.length === 0) return null;
+  const metro = REGION_TO_METRO[region];
+  if (metro) {
+    const { data } = await supabaseAdmin
+      .from('sjj_subway_station')
+      .select('line_nm, station_nm')
+      .eq('region_cd', metro);
+    (data || [])
+      .filter(d => normalizeStationName(d.station_nm) === target)
+      .forEach(d => slugs.add(toSlug(d.line_nm.replace(/\s+/g, ' ').trim(), metro)));
+  }
 
-  const names = matched.map(d => d.line_nm.replace(/\s+/g, ' ').trim());
-  return [...new Set(names)].join(', ');
+  // 지하철에 없으면(혹은 지하철 없는 지역이면) KTX도 확인
+  const { data: ktxData, error: ktxError } = await supabaseAdmin
+    .from('sjj_ktx_station')
+    .select('station_nm');
+  if (!ktxError && ktxData?.some(d => normalizeStationName(d.station_nm) === target)) {
+    slugs.add('ktx');
+  }
+
+  if (slugs.size === 0) return null;
+  return [...slugs].join(',');
 }
 
 // POST /api/room/register — 방 있는 사람 공고 등록
@@ -222,7 +261,7 @@ router.get('/list', optionalAuth, async (req, res) => {
       region: r.region,
       district: r.district,
       subway_stn: r.subway_stn,
-      subway_line: r.subway_line,
+      subway_line: parseSubwayLine(r.subway_line),
       pref_gender: r.pref_gender,
       share_total: calcShareTotal(share_rent, share_maint, r.share_rent_type, r.share_maint_type),
     };
@@ -278,7 +317,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
     region: data.region,
     district: data.district,
     subway_stn: data.subway_stn,
-    subway_line: data.subway_line,
+    subway_line: parseSubwayLine(data.subway_line),
     rent: data.rent,
     maint_fee: data.maint_fee,
     share_rent_type: data.share_rent_type,
