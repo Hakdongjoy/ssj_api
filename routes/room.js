@@ -72,6 +72,21 @@ function toSlug(lineNm, regionCd) {
   return LINE_SLUG_MAP[lineNm] || lineNm;
 }
 
+// 서울 1~9호선(seoul_N) slug를 번호 순으로 맨 앞에, 나머지는 원래 순서 유지
+function sortLineSlugs(slugs) {
+  const seoulNum = (s) => {
+    const m = s.match(/^seoul_([1-9])$/);
+    return m ? Number(m[1]) : null;
+  };
+  return [...slugs].sort((a, b) => {
+    const na = seoulNum(a), nb = seoulNum(b);
+    if (na !== null && nb !== null) return na - nb;
+    if (na !== null) return -1;
+    if (nb !== null) return 1;
+    return 0;
+  });
+}
+
 // 마스터 데이터(sjj_subway_station)는 노선마다 역명 표기가 제각각 — "역" 접미사 유무, "역명(병기명)",
 // "경성대·부경대" 같은 가운뎃점/마침표, 소스 엑셀 자체의 오타(따옴표 등)가 섞여 있어서 정규화 후 비교
 function normalizeStationName(name) {
@@ -101,7 +116,7 @@ async function resolveSubwayLine(region, subway_stn) {
     .forEach(d => slugs.add(toSlug(d.line_nm.replace(/\s+/g, ' ').trim(), d.region_cd)));
 
   if (slugs.size === 0) return null;
-  return [...slugs].join(',');
+  return sortLineSlugs(slugs).join(',');
 }
 
 // POST /api/room/register — 방 있는 사람 공고 등록
@@ -260,7 +275,7 @@ router.get('/station-search', async (req, res) => {
   };
 
   const stations = Object.values(groups)
-    .map(g => ({ name: g.name, region: g.region, lines: [...g.slugs] }))
+    .map(g => ({ name: g.name, region: g.region, lines: sortLineSlugs(g.slugs) }))
     .sort((a, b) => {
       const p = seoulLinePriority(a.lines) - seoulLinePriority(b.lines);
       return p !== 0 ? p : a.name.localeCompare(b.name, 'ko');
