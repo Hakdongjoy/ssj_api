@@ -45,6 +45,7 @@ ssj/
 | POST | `/api/user/pref` | 🔒 | 추가정보 등록 (방 없는 사람) |
 | POST | `/api/room/register` | 🔒 | 공고 등록 (방 있는 사람) |
 | GET | `/api/room/region_cnt` | - | 광역/시군구별 공고 개수 (지역선택용) |
+| GET | `/api/room/station-search` | - | 역 검색 자동완성 (지하철+KTX 통합) |
 | GET | `/api/room/list` | - | 공고 목록 (무한스크롤, 최초 7개) |
 | GET | `/api/room/:id` | - | 공고 상세 |
 
@@ -61,3 +62,4 @@ ssj/
 - 📞 `sjj_phone_verify` — 휴대폰 본인인증
 - 🗺️ `sjj_region` / `sjj_district` — 광역/시군구 마스터
 - 🚇 `sjj_subway_station` — 지하철 역-호선 마스터
+- 🚄 `sjj_ktx_station` — KTX 역-노선 마스터
