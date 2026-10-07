@@ -251,9 +251,21 @@ router.get('/station-search', async (req, res) => {
   (subwayRows || []).forEach(r => addRow(r, false));
   (ktxRows || []).forEach(r => addRow(r, true));
 
+  // 서울 1~9호선이 있는 역을 호선 번호 순으로 최우선 노출, 그 외는 가나다순
+  const seoulLinePriority = (lines) => {
+    const nums = lines
+      .map(l => l.match(/^seoul_([1-9])$/))
+      .filter(Boolean)
+      .map(m => Number(m[1]));
+    return nums.length ? Math.min(...nums) : 99;
+  };
+
   const stations = Object.values(groups)
     .map(g => ({ name: g.name, region: g.region, lines: [...g.slugs] }))
-    .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
+    .sort((a, b) => {
+      const p = seoulLinePriority(a.lines) - seoulLinePriority(b.lines);
+      return p !== 0 ? p : a.name.localeCompare(b.name, 'ko');
+    })
     .slice(0, safeLimit);
 
   res.json({ stations });
