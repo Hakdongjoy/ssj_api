@@ -220,6 +220,42 @@ router.get('/region_cnt', async (req, res) => {
   res.json({ regions: result });
 });
 
+// GET /api/room/station-search?q=강남&limit=20 — 가까운 역 검색 자동완성 (지하철+KTX 통합)
+router.get('/station-search', async (req, res) => {
+  const { q, limit = 20 } = req.query;
+  if (!q) return res.json({ stations: [] });
+
+  const safeLimit = Math.min(Number(limit) || 20, 50);
+  const pattern = `${q}%`;
+
+  const [{ data: subwayRows }, { data: ktxRows }] = await Promise.all([
+    supabaseAdmin.from('sjj_subway_station').select('region_cd, line_nm, station_nm').ilike('station_nm', pattern),
+    supabaseAdmin.from('sjj_ktx_station').select('region_cd, line_nm, station_nm').ilike('station_nm', pattern),
+  ]);
+
+  const groups = {}; // key: region_cd + '|' + normalizeStationName(station_nm)
+  const addRow = (row, isKtx) => {
+    const norm = normalizeStationName(row.station_nm);
+    if (!norm) return;
+    const key = `${row.region_cd}|${norm}`;
+    if (!groups[key]) {
+      const displayName = row.station_nm.endsWith('역') ? row.station_nm : `${row.station_nm}역`;
+      groups[key] = { name: displayName, region: row.region_cd, slugs: new Set() };
+    }
+    groups[key].slugs.add(isKtx ? 'ktx' : toSlug(row.line_nm.replace(/\s+/g, ' ').trim(), row.region_cd));
+  };
+
+  (subwayRows || []).forEach(r => addRow(r, false));
+  (ktxRows || []).forEach(r => addRow(r, true));
+
+  const stations = Object.values(groups)
+    .map(g => ({ name: g.name, region: g.region, lines: [...g.slugs] }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
+    .slice(0, safeLimit);
+
+  res.json({ stations });
+});
+
 // GET /api/room/list?region=서울&district=성북구&page=1&limit=7 — 인증 선택 (있으면 조회자 성별로 제한 공고 필터링)
 router.get('/list', optionalAuth, async (req, res) => {
   const { region, district, page = 1, limit = 7 } = req.query;
