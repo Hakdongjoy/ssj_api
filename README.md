@@ -25,7 +25,8 @@ ssj/
 ├── routes/
 │   ├── auth.js           # 회원가입 / 로그인 / SNS 로그인 / 휴대폰 인증 / 아이디 중복확인
 │   ├── user.js           # 닉네임 / 추가정보(방 없는 사람)
-│   └── room.js           # 공고 등록·목록·상세(방 있는 사람)
+│   ├── room.js           # 공고 등록·목록·상세·신청(방 있는 사람)
+│   └── chat.js           # 매칭 수락 후 채팅
 └── utils/
     └── nick.js           # 랜덤 닉네임 생성기
 ```
@@ -48,6 +49,13 @@ ssj/
 | GET | `/api/room/station-search` | - | 역 검색 자동완성 |
 | GET | `/api/room/list` | - | 공고 목록 (무한스크롤, 최초 7개) |
 | GET | `/api/room/:id` | - | 공고 상세 |
+| POST | `/api/room/:id/apply` | 🔒 | 살짝 신청하기 |
+| GET | `/api/room/applications/received` | 🔒 | 내가 받은 신청 목록 |
+| GET | `/api/room/applications/sent` | 🔒 | 내가 보낸 신청 목록 |
+| PATCH | `/api/room/applications/:applyId` | 🔒 | 신청 수락/거절 |
+| GET | `/api/chat/rooms` | 🔒 | 내 채팅방 목록 |
+| GET | `/api/chat/rooms/:chatRoomId/messages` | 🔒 | 메시지 조회 (폴링) |
+| POST | `/api/chat/rooms/:chatRoomId/messages` | 🔒 | 메시지 전송 |
 
 🔒 표시된 API는 `Authorization: Bearer <access_token>` 헤더가 필요해요.
 
@@ -62,3 +70,5 @@ ssj/
 - 📞 `sjj_phone_verify` — 휴대폰 본인인증
 - 🗺️ `sjj_region` / `sjj_district` — 광역/시군구 마스터
 - 🚇 `sjj_subway_station` — 지하철 역-호선 마스터 (서울/경기/인천 등 세분화된 지역 포함)
+- 🤝 `sjj_room_apply` — 살짝 신청 (매칭 신청/수락/거절)
+- 💬 `sjj_chat_room` / `sjj_chat_message` — 매칭 수락 후 채팅
