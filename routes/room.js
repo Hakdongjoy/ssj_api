@@ -32,11 +32,16 @@ function parseSubwayLine(subway_line) {
   return subway_line ? subway_line.split(',') : [];
 }
 
-// 공고의 region(서울/경기/인천 등)으로 sjj_subway_station을 검색할 때 같이 묶어서 찾을 지역 범위.
-// 서울/경기/인천은 생활권이 겹쳐서(같은 역을 다른 지역 거주자가 가깝다고 고를 수 있음) 3개 다같이 검색
-const STATION_SEARCH_SCOPE = {
-  '서울': ['서울', '경기', '인천'], '경기': ['서울', '경기', '인천'], '인천': ['서울', '경기', '인천'],
-};
+// 공고의 region(서울/경기/인천 등)으로 sjj_subway_station을 검색할 때 같이 묶어서 찾을 생활권 범위.
+// 노선이 도 경계를 넘어가는 경우(대경선→경북, 부산김해경전철/2호선 연장→경남, 동해선→울산) 반영
+const LIVING_AREA_GROUPS = [
+  ['서울', '경기', '인천'],
+  ['부산', '경남', '울산'],
+  ['대구', '경북'],
+];
+const STATION_SEARCH_SCOPE = Object.fromEntries(
+  LIVING_AREA_GROUPS.flatMap(group => group.map(region => [region, group]))
+);
 
 // line_nm(한글) → 프론트 아이콘 키(slug). 수도권은 아이콘 확인 완료, 그 외 지역은 추정값(확인 필요)
 const LINE_SLUG_MAP = {
@@ -53,7 +58,9 @@ const LINE_SLUG_MAP = {
 // region_cd가 서울/경기/인천처럼 세분화돼있어도 수도권 노선은 전부 "seoul_" 접두어로 통일
 const NUMBERED_LINE_PREFIX = {
   '서울': 'seoul', '경기': 'seoul', '인천': 'seoul',
-  '부산': 'busan', '대구': 'daegu', '광주': 'gwangju', '대전': 'daejeon',
+  '부산': 'busan', '경남': 'busan', // 부산 2호선 양산(경남) 연장구간
+  '대구': 'daegu', '경북': 'daegu', // 대구 2호선 경산(경북) 연장구간
+  '광주': 'gwangju', '대전': 'daejeon',
 };
 
 function toSlug(lineNm, regionCd) {
