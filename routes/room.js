@@ -285,9 +285,9 @@ router.get('/station-search', async (req, res) => {
   res.json({ stations });
 });
 
-// GET /api/room/list?region=서울&district=성북구&page=1&limit=7 — 인증 선택 (있으면 조회자 성별로 제한 공고 필터링)
+// GET /api/room/list?region=서울&district=성북구&subway_stn=강남역&page=1&limit=7 — 인증 선택 (있으면 조회자 성별로 제한 공고 필터링)
 router.get('/list', optionalAuth, async (req, res) => {
-  const { region, district, page = 1, limit = 7 } = req.query;
+  const { region, district, subway_stn, page = 1, limit = 7 } = req.query;
   const safeLimit = Math.min(Number(limit) || 7, 50);
   const offset = (Number(page) - 1) * safeLimit;
 
@@ -300,6 +300,7 @@ router.get('/list', optionalAuth, async (req, res) => {
 
   if (region) query = query.ilike('region', `${region}%`);
   if (district) query = query.ilike('district', `${district}%`);
+  if (subway_stn) query = query.eq('subway_stn', subway_stn);
 
   const { data, error, count } = await query;
   if (error) return res.status(500).json({ code: 'LIST_FETCH_FAILED', error: '목록 조회에 실패했습니다. 잠시 후 다시 시도해주세요' });
