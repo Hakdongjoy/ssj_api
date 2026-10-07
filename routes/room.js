@@ -32,10 +32,10 @@ function parseSubwayLine(subway_line) {
   return subway_line ? subway_line.split(',') : [];
 }
 
-// 공고의 region(서울/경기/인천 등) → sjj_subway_station.region_cd 매핑. 도시철도 없는 지역은 매핑 없음(null)
-const REGION_TO_METRO = {
-  '서울': '수도권', '경기': '수도권', '인천': '수도권',
-  '부산': '부산', '대구': '대구', '광주': '광주', '대전': '대전',
+// 공고의 region(서울/경기/인천 등)으로 sjj_subway_station을 검색할 때 같이 묶어서 찾을 지역 범위.
+// 서울/경기/인천은 생활권이 겹쳐서(같은 역을 다른 지역 거주자가 가깝다고 고를 수 있음) 3개 다같이 검색
+const STATION_SEARCH_SCOPE = {
+  '서울': ['서울', '경기', '인천'], '경기': ['서울', '경기', '인천'], '인천': ['서울', '경기', '인천'],
 };
 
 // line_nm(한글) → 프론트 아이콘 키(slug). 수도권은 아이콘 확인 완료, 그 외 지역은 추정값(확인 필요)
@@ -49,15 +49,17 @@ const LINE_SLUG_MAP = {
   '부산김해경전철': 'busan_gimhae', '동해선': 'donghae', '대경선': 'daegyeong', '자기부상철도': 'maglev',
 };
 
-// 1~9호선은 지역별로 접두어가 다름 (서울/부산/대구/광주/대전 각각 1호선이 있어서)
+// 1~9호선은 지역별로 접두어가 다름 (서울/부산/대구/광주/대전 각각 1호선이 있어서).
+// region_cd가 서울/경기/인천처럼 세분화돼있어도 수도권 노선은 전부 "seoul_" 접두어로 통일
 const NUMBERED_LINE_PREFIX = {
-  '수도권': 'seoul', '부산': 'busan', '대구': 'daegu', '광주': 'gwangju', '대전': 'daejeon',
+  '서울': 'seoul', '경기': 'seoul', '인천': 'seoul',
+  '부산': 'busan', '대구': 'daegu', '광주': 'gwangju', '대전': 'daejeon',
 };
 
-function toSlug(lineNm, metro) {
+function toSlug(lineNm, regionCd) {
   const m = lineNm.match(/^([1-9])호선$/);
   if (m) {
-    const prefix = NUMBERED_LINE_PREFIX[metro] || metro;
+    const prefix = NUMBERED_LINE_PREFIX[regionCd] || regionCd;
     return `${prefix}_${m[1]}`;
   }
   return LINE_SLUG_MAP[lineNm] || lineNm;
@@ -78,19 +80,18 @@ async function resolveSubwayLine(region, subway_stn) {
   if (!subway_stn) return null;
   const target = normalizeStationName(subway_stn);
   if (!target) return null;
+  if (!region) return null;
+
+  const scope = STATION_SEARCH_SCOPE[region] || [region];
+  const { data } = await supabaseAdmin
+    .from('sjj_subway_station')
+    .select('line_nm, station_nm, region_cd')
+    .in('region_cd', scope);
 
   const slugs = new Set();
-
-  const metro = REGION_TO_METRO[region];
-  if (metro) {
-    const { data } = await supabaseAdmin
-      .from('sjj_subway_station')
-      .select('line_nm, station_nm')
-      .eq('region_cd', metro);
-    (data || [])
-      .filter(d => normalizeStationName(d.station_nm) === target)
-      .forEach(d => slugs.add(toSlug(d.line_nm.replace(/\s+/g, ' ').trim(), metro)));
-  }
+  (data || [])
+    .filter(d => normalizeStationName(d.station_nm) === target)
+    .forEach(d => slugs.add(toSlug(d.line_nm.replace(/\s+/g, ' ').trim(), d.region_cd)));
 
   if (slugs.size === 0) return null;
   return [...slugs].join(',');
