@@ -351,6 +351,151 @@ router.get('/list', optionalAuth, async (req, res) => {
   });
 });
 
+// GET /api/room/applications/received — 내가 받은 신청 목록 (내 공고들에 들어온 신청)
+router.get('/applications/received', verifyToken, async (req, res) => {
+  const user_id = req.user.id;
+
+  const { data: myRooms } = await supabaseAdmin.from('sjj_room').select('id').eq('user_id', user_id);
+  const roomIds = (myRooms || []).map(r => r.id);
+  if (roomIds.length === 0) return res.json({ applications: [] });
+
+  const { data, error } = await supabaseAdmin
+    .from('sjj_room_apply')
+    .select('id, status, message, created_at, responded_at, room_id, applicant_id, sjj_user!applicant_id(nick, gender, birth), sjj_room!room_id(district, subway_stn)')
+    .in('room_id', roomIds)
+    .order('created_at', { ascending: false });
+
+  if (error) return res.status(500).json({ code: 'APPLY_LIST_FAILED', error: '신청 목록 조회에 실패했습니다. 잠시 후 다시 시도해주세요' });
+
+  const applications = data.map(a => ({
+    id: a.id,
+    status: a.status,
+    message: a.message,
+    created_at: a.created_at,
+    responded_at: a.responded_at,
+    room_id: a.room_id,
+    room_district: a.sjj_room?.district,
+    room_subway_stn: a.sjj_room?.subway_stn,
+    applicant_nick: a.sjj_user?.nick,
+    applicant_gender: a.sjj_user?.gender,
+    applicant_age: calcAge(a.sjj_user?.birth),
+  }));
+
+  res.json({ applications });
+});
+
+// GET /api/room/applications/sent — 내가 보낸 신청 목록
+router.get('/applications/sent', verifyToken, async (req, res) => {
+  const user_id = req.user.id;
+
+  const { data, error } = await supabaseAdmin
+    .from('sjj_room_apply')
+    .select('id, status, message, created_at, responded_at, room_id, sjj_room!room_id(district, subway_stn, rent, maint_fee)')
+    .eq('applicant_id', user_id)
+    .order('created_at', { ascending: false });
+
+  if (error) return res.status(500).json({ code: 'APPLY_LIST_FAILED', error: '신청 목록 조회에 실패했습니다. 잠시 후 다시 시도해주세요' });
+
+  const applications = data.map(a => ({
+    id: a.id,
+    status: a.status,
+    message: a.message,
+    created_at: a.created_at,
+    responded_at: a.responded_at,
+    room_id: a.room_id,
+    room_district: a.sjj_room?.district,
+    room_subway_stn: a.sjj_room?.subway_stn,
+  }));
+
+  res.json({ applications });
+});
+
+// PATCH /api/room/applications/:applyId — 수락/거절 (집주인만)
+router.patch('/applications/:applyId', verifyToken, async (req, res) => {
+  const user_id = req.user.id;
+  const { applyId } = req.params;
+  const { status } = req.body;
+
+  if (!['accepted', 'rejected'].includes(status)) {
+    return res.status(400).json({ code: 'INVALID_STATUS', error: '필요한 정보를 모두 입력했는지 다시 확인해주세요' });
+  }
+
+  const { data: apply, error: fetchError } = await supabaseAdmin
+    .from('sjj_room_apply')
+    .select('id, room_id, applicant_id, status, sjj_room!room_id(id, user_id)')
+    .eq('id', applyId)
+    .single();
+
+  if (fetchError || !apply) return res.status(404).json({ code: 'APPLY_NOT_FOUND', error: '신청 내역을 찾을 수 없습니다' });
+  if (apply.sjj_room.user_id !== user_id) return res.status(403).json({ code: 'FORBIDDEN', error: '본인 공고의 신청만 처리할 수 있습니다' });
+  if (apply.status !== 'pending') return res.status(400).json({ code: 'ALREADY_RESPONDED', error: '이미 처리된 신청입니다' });
+
+  const { error: updateError } = await supabaseAdmin
+    .from('sjj_room_apply')
+    .update({ status, responded_at: new Date().toISOString() })
+    .eq('id', applyId);
+
+  if (updateError) return res.status(500).json({ code: 'APPLY_UPDATE_FAILED', error: '처리에 실패했습니다. 잠시 후 다시 시도해주세요' });
+
+  if (status === 'rejected') {
+    return res.json({ success: true, status: 'rejected' });
+  }
+
+  // 수락: 공고 비활성화 + 다른 대기중 신청 자동 거절 + 채팅방 생성
+  await supabaseAdmin.from('sjj_room').update({ is_active: false }).eq('id', apply.room_id);
+  await supabaseAdmin
+    .from('sjj_room_apply')
+    .update({ status: 'rejected', responded_at: new Date().toISOString() })
+    .eq('room_id', apply.room_id)
+    .eq('status', 'pending');
+
+  const { data: chatRoom, error: chatError } = await supabaseAdmin
+    .from('sjj_chat_room')
+    .insert({ apply_id: apply.id, room_id: apply.room_id, owner_id: user_id, applicant_id: apply.applicant_id })
+    .select('id')
+    .single();
+
+  if (chatError) {
+    console.error('[applications/:applyId] 채팅방 생성 실패:', chatError.message);
+    return res.status(500).json({ code: 'CHAT_ROOM_CREATE_FAILED', error: '처리에 실패했습니다. 잠시 후 다시 시도해주세요' });
+  }
+
+  res.json({ success: true, status: 'accepted', chat_room_id: chatRoom.id });
+});
+
+// POST /api/room/:id/apply — 살짝 신청하기
+router.post('/:id/apply', verifyToken, async (req, res) => {
+  const user_id = req.user.id;
+  const { id: room_id } = req.params;
+  const { message } = req.body;
+
+  const { data: room, error: roomError } = await supabaseAdmin
+    .from('sjj_room')
+    .select('id, user_id, is_active')
+    .eq('id', room_id)
+    .single();
+
+  if (roomError || !room) return res.status(404).json({ code: 'ROOM_NOT_FOUND', error: '공고를 찾을 수 없습니다' });
+  if (!room.is_active) return res.status(400).json({ code: 'ROOM_NOT_ACTIVE', error: '이미 마감된 공고입니다' });
+  if (room.user_id === user_id) return res.status(400).json({ code: 'SELF_APPLY_FORBIDDEN', error: '본인 공고에는 신청할 수 없습니다' });
+
+  const { data: apply, error } = await supabaseAdmin
+    .from('sjj_room_apply')
+    .insert({ room_id, applicant_id: user_id, message })
+    .select('id, status')
+    .single();
+
+  if (error) {
+    if (error.code === '23505') {
+      return res.status(400).json({ code: 'ALREADY_APPLIED', error: '이미 신청한 공고입니다' });
+    }
+    console.error('[room/apply] 실패:', error.message);
+    return res.status(500).json({ code: 'APPLY_FAILED', error: '신청에 실패했습니다. 잠시 후 다시 시도해주세요' });
+  }
+
+  res.json({ success: true, apply_id: apply.id, status: apply.status });
+});
+
 // GET /api/room/:id — 인증 선택 (있으면 조회자 성별로 제한 공고 필터링)
 router.get('/:id', optionalAuth, async (req, res) => {
   const { id } = req.params;
