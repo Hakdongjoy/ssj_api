@@ -303,6 +303,11 @@ router.get('/list', optionalAuth, async (req, res) => {
   if (subway_stn) query = query.eq('subway_stn', subway_stn);
 
   const { data, error, count } = await query;
+
+  // PGRST103: 요청한 page가 실제 데이터 범위를 벗어남(필터 결과가 적을 때 자주 발생) — 에러 아니라 빈 목록으로 처리
+  if (error?.code === 'PGRST103') {
+    return res.json({ total: 0, page: Number(page), has_more: false, list: [] });
+  }
   if (error) return res.status(500).json({ code: 'LIST_FETCH_FAILED', error: '목록 조회에 실패했습니다. 잠시 후 다시 시도해주세요' });
 
   const userIds = data.map(r => r.user_id);
