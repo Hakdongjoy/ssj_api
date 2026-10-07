@@ -98,11 +98,13 @@ function normalizeStationName(name) {
     .trim();
 }
 
+// subway_stn 입력값을 마스터 테이블과 매칭해서 { line, canonicalName }을 반환.
+// canonicalName은 역검색(station-search)이 보여주는 표시명과 동일하게 맞춰서 저장 —
+// "교대역"처럼 사용자가 축약 입력해도 "교대(법원.검찰청)역"으로 정규화 저장해 동명이역 충돌 방지
 async function resolveSubwayLine(region, subway_stn) {
-  if (!subway_stn) return null;
+  if (!subway_stn || !region) return { line: null, canonicalName: subway_stn || null };
   const target = normalizeStationName(subway_stn);
-  if (!target) return null;
-  if (!region) return null;
+  if (!target) return { line: null, canonicalName: subway_stn };
 
   const scope = STATION_SEARCH_SCOPE[region] || [region];
   const { data } = await supabaseAdmin
@@ -110,13 +112,16 @@ async function resolveSubwayLine(region, subway_stn) {
     .select('line_nm, station_nm, region_cd')
     .in('region_cd', scope);
 
-  const slugs = new Set();
-  (data || [])
-    .filter(d => normalizeStationName(d.station_nm) === target)
-    .forEach(d => slugs.add(toSlug(d.line_nm.replace(/\s+/g, ' ').trim(), d.region_cd)));
+  const matched = (data || []).filter(d => normalizeStationName(d.station_nm) === target);
+  if (matched.length === 0) return { line: null, canonicalName: subway_stn };
 
-  if (slugs.size === 0) return null;
-  return sortLineSlugs(slugs).join(',');
+  const slugs = new Set();
+  matched.forEach(d => slugs.add(toSlug(d.line_nm.replace(/\s+/g, ' ').trim(), d.region_cd)));
+
+  const rawName = matched[0].station_nm;
+  const canonicalName = rawName.endsWith('역') ? rawName : `${rawName}역`;
+
+  return { line: sortLineSlugs(slugs).join(','), canonicalName };
 }
 
 // POST /api/room/register — 방 있는 사람 공고 등록
@@ -159,13 +164,13 @@ router.post('/register', verifyToken, async (req, res) => {
     return res.status(500).json({ code: 'PROF_SAVE_FAILED', error: '저장에 실패했습니다. 잠시 후 다시 시도해주세요' });
   }
 
-  const subway_line = await resolveSubwayLine(region, subway_stn);
+  const { line: subway_line, canonicalName: canonicalSubwayStn } = await resolveSubwayLine(region, subway_stn);
 
   const { error: roomError } = await supabaseAdmin
     .from('sjj_room')
     .insert({
       user_id,
-      region, district, subway_stn, subway_line,
+      region, district, subway_stn: canonicalSubwayStn, subway_line,
       rent, maint_fee,
       pref_gender, restrict_gender,
       share_rent_type, share_rent_amount,
