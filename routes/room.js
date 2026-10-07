@@ -38,7 +38,7 @@ const REGION_TO_METRO = {
   '부산': '부산', '대구': '대구', '광주': '광주', '대전': '대전',
 };
 
-// line_nm(한글) → 프론트 아이콘 키(slug). 수도권/KTX는 아이콘 확인 완료, 그 외 지역은 추정값(확인 필요)
+// line_nm(한글) → 프론트 아이콘 키(slug). 수도권은 아이콘 확인 완료, 그 외 지역은 추정값(확인 필요)
 const LINE_SLUG_MAP = {
   '공항철도': 'airport_railroad', '에버라인': 'everline', '김포골드라인': 'gimpo_goldline',
   'GTX-A': 'gtx_a', '경춘선': 'gyeongchun', '경강선': 'gyeonggang', '경의중앙선': 'gyeongui_jungang',
@@ -90,14 +90,6 @@ async function resolveSubwayLine(region, subway_stn) {
     (data || [])
       .filter(d => normalizeStationName(d.station_nm) === target)
       .forEach(d => slugs.add(toSlug(d.line_nm.replace(/\s+/g, ' ').trim(), metro)));
-  }
-
-  // 지하철에 없으면(혹은 지하철 없는 지역이면) KTX도 확인
-  const { data: ktxData, error: ktxError } = await supabaseAdmin
-    .from('sjj_ktx_station')
-    .select('station_nm');
-  if (!ktxError && ktxData?.some(d => normalizeStationName(d.station_nm) === target)) {
-    slugs.add('ktx');
   }
 
   if (slugs.size === 0) return null;
@@ -220,7 +212,7 @@ router.get('/region_cnt', async (req, res) => {
   res.json({ regions: result });
 });
 
-// GET /api/room/station-search?q=강남&limit=20 — 가까운 역 검색 자동완성 (지하철+KTX 통합)
+// GET /api/room/station-search?q=강남&limit=20 — 가까운 역 검색 자동완성
 router.get('/station-search', async (req, res) => {
   const { q, limit = 20 } = req.query;
   if (!q) return res.json({ stations: [] });
@@ -228,28 +220,24 @@ router.get('/station-search', async (req, res) => {
   const safeLimit = Math.min(Number(limit) || 20, 50);
   const pattern = `${q}%`;
 
-  const [{ data: subwayRows }, { data: ktxRows }] = await Promise.all([
-    supabaseAdmin.from('sjj_subway_station').select('region_cd, line_nm, station_nm').ilike('station_nm', pattern),
-    supabaseAdmin.from('sjj_ktx_station').select('region_cd, line_nm, station_nm').ilike('station_nm', pattern),
-  ]);
+  const { data: subwayRows } = await supabaseAdmin
+    .from('sjj_subway_station')
+    .select('region_cd, line_nm, station_nm')
+    .ilike('station_nm', pattern);
 
-  const groups = {}; // key: (그룹핑용 지역버킷) + '|' + normalizeStationName(station_nm)
-  const addRow = (row, isKtx) => {
+  const groups = {}; // key: region_cd + '|' + normalizeStationName(station_nm)
+  const addRow = (row) => {
     const norm = normalizeStationName(row.station_nm);
     if (!norm) return;
-    // KTX는 지하철이 있는 권역(서울/경기/인천→수도권, 부산/대구/광주/대전)이면 같은 그룹으로 묶어서
-    // "서울역" 같은 역이 지하철/KTX 따로 안 나오게 함. 지하철 없는 지역은 KTX 고유 지역명 그대로 유지
-    const groupRegion = isKtx ? (REGION_TO_METRO[row.region_cd] || row.region_cd) : row.region_cd;
-    const key = `${groupRegion}|${norm}`;
+    const key = `${row.region_cd}|${norm}`;
     if (!groups[key]) {
       const displayName = row.station_nm.endsWith('역') ? row.station_nm : `${row.station_nm}역`;
-      groups[key] = { name: displayName, region: groupRegion, slugs: new Set() };
+      groups[key] = { name: displayName, region: row.region_cd, slugs: new Set() };
     }
-    groups[key].slugs.add(isKtx ? 'ktx' : toSlug(row.line_nm.replace(/\s+/g, ' ').trim(), row.region_cd));
+    groups[key].slugs.add(toSlug(row.line_nm.replace(/\s+/g, ' ').trim(), row.region_cd));
   };
 
-  (subwayRows || []).forEach(r => addRow(r, false));
-  (ktxRows || []).forEach(r => addRow(r, true));
+  (subwayRows || []).forEach(addRow);
 
   // 서울 1~9호선이 있는 역을 호선 번호 순으로 최우선 노출, 그 외는 가나다순
   const seoulLinePriority = (lines) => {
