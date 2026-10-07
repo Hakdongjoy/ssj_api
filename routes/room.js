@@ -235,7 +235,7 @@ router.get('/region_cnt', async (req, res) => {
   res.json({ regions: result });
 });
 
-// GET /api/room/station-search?q=강남&region=서울&limit=20 — 가까운 역 검색 자동완성 (역명에 검색어가 포함되면 매칭, 접두어 한정 아님). region 주면 정확히 그 지역 역만
+// GET /api/room/station-search?q=강남&region=서울&limit=20 — 가까운 역 검색 자동완성 (역명에 검색어가 포함되면 매칭). region 주면 정확히 그 지역 역만
 router.get('/station-search', async (req, res) => {
   const { q, region, limit = 20 } = req.query;
   if (!q) return res.json({ stations: [] });
