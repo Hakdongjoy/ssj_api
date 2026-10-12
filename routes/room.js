@@ -335,19 +335,53 @@ function applyRoomFilters(query, qp) {
   return query;
 }
 
-// 조건필터 중 sjj_user_info(직업/생활스타일/흡연상태) 컬럼으로 걸리는 조건 — room과 user_id로 조인해야 해서 먼저 user_id 목록을 구함.
-// 반환값 null이면 "필터 없음"(= 전체), 배열이면 그 user_id들로만 제한 (빈 배열이면 결과 0건)
+// age_range("20"/"30"/"40") → 만 나이가 아니라 calcAge와 동일한 한국 나이 기준 출생연도 범위로 변환
+// 나이 = 현재연도 - 출생연도 + 1  ->  출생연도 = 현재연도 - 나이 + 1
+function ageRangeToBirthYearBounds(age_range) {
+  const currentYear = new Date().getFullYear();
+  let minAge, maxAge;
+  if (age_range === '20') { minAge = 20; maxAge = 29; }
+  else if (age_range === '30') { minAge = 30; maxAge = 39; }
+  else if (age_range === '40') { minAge = 40; maxAge = 150; }
+  else return null;
+
+  return {
+    minBirthYear: maxAge >= 150 ? 1900 : currentYear - maxAge + 1,
+    maxBirthYear: currentYear - minAge + 1,
+  };
+}
+
+// 조건필터 중 sjj_user_info(직업/생활스타일/흡연상태)·sjj_user(연령대) 컬럼으로 걸리는 조건 — room과 user_id로 조인해야 해서 먼저 user_id 목록을 구함.
+// 반환값 null이면 "필터 없음"(= 전체), 배열이면 그 user_id들로만 제한 (빈 배열이면 결과 0건). 여러 조건이 같이 오면 교집합.
 async function resolveFilteredUserIds(qp) {
-  const { job, pers_type, smoking } = qp;
-  if (!job && !pers_type && !smoking) return null;
+  const { job, pers_type, smoking, age_range } = qp;
+  const idSets = [];
 
-  let query = supabaseAdmin.from('sjj_user_info').select('user_id');
-  if (job) query = query.eq('job', job);
-  if (pers_type) query = query.eq('pers_type', pers_type);
-  if (smoking) query = query.eq('smoking', smoking);
+  if (job || pers_type || smoking) {
+    let query = supabaseAdmin.from('sjj_user_info').select('user_id');
+    if (job) query = query.eq('job', job);
+    if (pers_type) query = query.eq('pers_type', pers_type);
+    if (smoking) query = query.eq('smoking', smoking);
+    const { data } = await query;
+    idSets.push(new Set((data || []).map(d => d.user_id)));
+  }
 
-  const { data } = await query;
-  return (data || []).map(d => d.user_id);
+  const bounds = ageRangeToBirthYearBounds(age_range);
+  if (bounds) {
+    const { data } = await supabaseAdmin
+      .from('sjj_user')
+      .select('id')
+      .gte('birth', `${bounds.minBirthYear}-01-01`)
+      .lte('birth', `${bounds.maxBirthYear}-12-31`);
+    idSets.push(new Set((data || []).map(d => d.id)));
+  }
+
+  if (idSets.length === 0) return null;
+  let result = [...idSets[0]];
+  for (let i = 1; i < idSets.length; i++) {
+    result = result.filter(id => idSets[i].has(id));
+  }
+  return result;
 }
 
 // GET /api/room/list?region=서울&district=성북구&subway_stn=강남역&page=1&limit=7 — 인증 선택 (있으면 조회자 성별로 제한 공고 필터링)
