@@ -351,17 +351,19 @@ function ageRangeToBirthYearBounds(age_range) {
   };
 }
 
-// 조건필터 중 sjj_user_info(직업/생활스타일/흡연상태)·sjj_user(연령대) 컬럼으로 걸리는 조건 — room과 user_id로 조인해야 해서 먼저 user_id 목록을 구함.
+// 조건필터 중 sjj_user_info(직업/생활스타일/흡연상태/음주빈도/반려동물보유)·sjj_user(연령대) 컬럼으로 걸리는 조건 — room과 user_id로 조인해야 해서 먼저 user_id 목록을 구함.
 // 반환값 null이면 "필터 없음"(= 전체), 배열이면 그 user_id들로만 제한 (빈 배열이면 결과 0건). 여러 조건이 같이 오면 교집합.
 async function resolveFilteredUserIds(qp) {
-  const { job, pers_type, smoking, age_range } = qp;
+  const { job, pers_type, smoking, drink_freq, pet, age_range } = qp;
   const idSets = [];
 
-  if (job || pers_type || smoking) {
+  if (job || pers_type || smoking || drink_freq || pet) {
     let query = supabaseAdmin.from('sjj_user_info').select('user_id');
     if (job) query = query.eq('job', job);
     if (pers_type) query = query.eq('pers_type', pers_type);
     if (smoking) query = query.eq('smoking', smoking);
+    if (drink_freq) query = query.eq('drink_freq', drink_freq);
+    if (pet) query = query.eq('pet', pet === 'true');
     const { data } = await query;
     idSets.push(new Set((data || []).map(d => d.user_id)));
   }
