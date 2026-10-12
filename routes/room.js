@@ -309,11 +309,57 @@ router.get('/station-search', async (req, res) => {
   res.json({ stations });
 });
 
+// 조건필터(생활조건/동거인조건/비용) 중 sjj_room 컬럼으로 바로 거는 조건들. list/count가 공유.
+function applyRoomFilters(query, qp) {
+  const {
+    region, district, subway_stn, house_type, pref_gender, clean_level,
+    avoid_smoke, avoid_drink, avoid_pet,
+    deposit_min, deposit_max, rent_min, rent_max,
+  } = qp;
+
+  if (region) query = query.ilike('region', `${region}%`);
+  if (district) query = query.ilike('district', `${district}%`);
+  if (subway_stn) query = query.eq('subway_stn', subway_stn);
+  if (house_type) query = query.eq('house_type', house_type);
+  if (clean_level) query = query.eq('clean_level', clean_level);
+  if (avoid_smoke === 'true') query = query.eq('avoid_smoke', true);
+  if (avoid_drink === 'true') query = query.eq('avoid_drink', true);
+  if (avoid_pet === 'true') query = query.eq('avoid_pet', true);
+  // 성별 무관(any) 공고는 어떤 성별로 필터링해도 항상 포함
+  if (pref_gender && pref_gender !== 'any') query = query.in('pref_gender', ['any', pref_gender]);
+  if (deposit_min) query = query.gte('deposit', Number(deposit_min));
+  if (deposit_max) query = query.lte('deposit', Number(deposit_max));
+  if (rent_min) query = query.gte('rent', Number(rent_min));
+  if (rent_max) query = query.lte('rent', Number(rent_max));
+
+  return query;
+}
+
+// 조건필터 중 sjj_user_info(직업/생활스타일/흡연상태) 컬럼으로 걸리는 조건 — room과 user_id로 조인해야 해서 먼저 user_id 목록을 구함.
+// 반환값 null이면 "필터 없음"(= 전체), 배열이면 그 user_id들로만 제한 (빈 배열이면 결과 0건)
+async function resolveFilteredUserIds(qp) {
+  const { job, pers_type, smoking } = qp;
+  if (!job && !pers_type && !smoking) return null;
+
+  let query = supabaseAdmin.from('sjj_user_info').select('user_id');
+  if (job) query = query.eq('job', job);
+  if (pers_type) query = query.eq('pers_type', pers_type);
+  if (smoking) query = query.eq('smoking', smoking);
+
+  const { data } = await query;
+  return (data || []).map(d => d.user_id);
+}
+
 // GET /api/room/list?region=서울&district=성북구&subway_stn=강남역&page=1&limit=7 — 인증 선택 (있으면 조회자 성별로 제한 공고 필터링)
 router.get('/list', optionalAuth, async (req, res) => {
-  const { region, district, subway_stn, page = 1, limit = 7 } = req.query;
+  const { page = 1, limit = 7 } = req.query;
   const safeLimit = Math.min(Number(limit) || 7, 50);
   const offset = (Number(page) - 1) * safeLimit;
+
+  const filteredUserIds = await resolveFilteredUserIds(req.query);
+  if (filteredUserIds && filteredUserIds.length === 0) {
+    return res.json({ total: 0, page: Number(page), has_more: false, list: [] });
+  }
 
   let query = supabaseAdmin
     .from('sjj_room')
@@ -322,9 +368,8 @@ router.get('/list', optionalAuth, async (req, res) => {
     .order('created_at', { ascending: false })
     .range(offset, offset + safeLimit - 1);
 
-  if (region) query = query.ilike('region', `${region}%`);
-  if (district) query = query.ilike('district', `${district}%`);
-  if (subway_stn) query = query.eq('subway_stn', subway_stn);
+  query = applyRoomFilters(query, req.query);
+  if (filteredUserIds) query = query.in('user_id', filteredUserIds);
 
   const { data, error, count } = await query;
 
@@ -391,16 +436,18 @@ router.get('/list', optionalAuth, async (req, res) => {
 
 // GET /api/room/count?region=서울&district=성북구&subway_stn=강남역 — 필터 적용 시 결과 개수만 조회 (필터 모달 미리보기용)
 router.get('/count', async (req, res) => {
-  const { region, district, subway_stn } = req.query;
+  const filteredUserIds = await resolveFilteredUserIds(req.query);
+  if (filteredUserIds && filteredUserIds.length === 0) {
+    return res.json({ total: 0 });
+  }
 
   let query = supabaseAdmin
     .from('sjj_room')
     .select('id', { count: 'exact', head: true })
     .eq('is_active', true);
 
-  if (region) query = query.ilike('region', `${region}%`);
-  if (district) query = query.ilike('district', `${district}%`);
-  if (subway_stn) query = query.eq('subway_stn', subway_stn);
+  query = applyRoomFilters(query, req.query);
+  if (filteredUserIds) query = query.in('user_id', filteredUserIds);
 
   const { count, error } = await query;
   if (error) return res.status(500).json({ code: 'COUNT_FAILED', error: '개수 조회에 실패했습니다. 잠시 후 다시 시도해주세요' });
