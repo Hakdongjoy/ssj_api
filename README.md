@@ -48,6 +48,7 @@ ssj/
 | GET | `/api/room/region_cnt` | - | 광역/시군구별 공고 개수 (지역선택용) |
 | GET | `/api/room/station-search` | - | 역 검색 자동완성 |
 | GET | `/api/room/list` | - | 공고 목록 (무한스크롤, 최초 7개) |
+| GET | `/api/room/count` | - | 필터 적용 시 결과 개수만 조회 (필터 모달 미리보기용) |
 | GET | `/api/room/:id` | - | 공고 상세 |
 | POST | `/api/room/:id/apply` | 🔒 | 살짝 신청하기 |
 | GET | `/api/room/applications/received` | 🔒 | 내가 받은 신청 목록 |
@@ -72,3 +73,4 @@ ssj/
 - 🚇 `sjj_subway_station` — 지하철 역-호선 마스터 (서울/경기/인천 등 세분화된 지역 포함)
 - 🤝 `sjj_room_apply` — 살짝 신청 (매칭 신청/수락/거절)
 - 💬 `sjj_chat_room` / `sjj_chat_message` — 매칭 수락 후 채팅
+- 🖼️ `sjj_room_photo` — 공고 사진 URL (Supabase Storage `room-photos` 버킷)

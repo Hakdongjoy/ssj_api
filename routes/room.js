@@ -137,6 +137,9 @@ router.post('/register', verifyToken, async (req, res) => {
     avoid_smoke, avoid_drink, avoid_pet,
     bio,
     profile_agree, location_agree, push_agree, marketing_agree,
+    house_type, deposit, recruit_count, move_in_type,
+    utility_separate, furniture_included, private_room_count, clean_level,
+    photo_public, photo_urls,
     // 추가정보 (sjj_user_info)
     job, job_input, is_remote,
     sleep_hour, wake_hour,
@@ -166,7 +169,7 @@ router.post('/register', verifyToken, async (req, res) => {
 
   const { line: subway_line, canonicalName: canonicalSubwayStn } = await resolveSubwayLine(region, subway_stn);
 
-  const { error: roomError } = await supabaseAdmin
+  const { data: roomData, error: roomError } = await supabaseAdmin
     .from('sjj_room')
     .insert({
       user_id,
@@ -178,12 +181,28 @@ router.post('/register', verifyToken, async (req, res) => {
       avoid_smoke, avoid_drink, avoid_pet,
       bio,
       profile_agree, location_agree, push_agree, marketing_agree,
+      house_type, deposit, recruit_count, move_in_type,
+      utility_separate, furniture_included, private_room_count, clean_level,
+      photo_public,
       is_active: true,
-    });
+    })
+    .select('id')
+    .single();
 
   if (roomError) {
     console.error('[room/register] room 실패:', roomError.message);
     return res.status(500).json({ code: 'ROOM_REGISTER_FAILED', error: '공고 등록에 실패했습니다. 잠시 후 다시 시도해주세요' });
+  }
+
+  if (Array.isArray(photo_urls) && photo_urls.length > 0) {
+    const photoPrefix = `${process.env.SUPABASE_URL}/storage/v1/object/public/room-photos/`;
+    const validUrls = photo_urls.filter(u => typeof u === 'string' && u.startsWith(photoPrefix));
+    if (validUrls.length > 0) {
+      const { error: photoError } = await supabaseAdmin
+        .from('sjj_room_photo')
+        .insert(validUrls.map((url, i) => ({ room_id: roomData.id, url, sort_order: i })));
+      if (photoError) console.error('[room/register] 사진 저장 실패:', photoError.message);
+    }
   }
 
   console.log('[room/register] 완료');
@@ -298,7 +317,7 @@ router.get('/list', optionalAuth, async (req, res) => {
 
   let query = supabaseAdmin
     .from('sjj_room')
-    .select('id, user_id, region, district, subway_stn, subway_line, rent, maint_fee, pref_gender, restrict_gender, share_rent_type, share_rent_amount, share_maint_type, share_maint_amount, sjj_user!user_id(nick, gender, birth)', { count: 'exact' })
+    .select('id, user_id, region, district, subway_stn, subway_line, rent, maint_fee, pref_gender, restrict_gender, share_rent_type, share_rent_amount, share_maint_type, share_maint_amount, house_type, recruit_count, move_in_type, avoid_smoke, photo_public, clean_level, sjj_user!user_id(nick, gender, birth)', { count: 'exact' })
     .eq('is_active', true)
     .order('created_at', { ascending: false })
     .range(offset, offset + safeLimit - 1);
@@ -316,12 +335,24 @@ router.get('/list', optionalAuth, async (req, res) => {
   if (error) return res.status(500).json({ code: 'LIST_FETCH_FAILED', error: '목록 조회에 실패했습니다. 잠시 후 다시 시도해주세요' });
 
   const userIds = data.map(r => r.user_id);
+  const roomIds = data.map(r => r.id);
   const { data: profs } = await supabaseAdmin
     .from('sjj_user_info')
-    .select('user_id, job')
+    .select('user_id, job, pers_type')
     .in('user_id', userIds);
 
   const profMap = Object.fromEntries((profs || []).map(p => [p.user_id, p]));
+
+  const { data: coverPhotos } = await supabaseAdmin
+    .from('sjj_room_photo')
+    .select('room_id, url, sort_order')
+    .in('room_id', roomIds)
+    .order('sort_order', { ascending: true });
+
+  const coverMap = {};
+  for (const p of coverPhotos || []) {
+    if (!(p.room_id in coverMap)) coverMap[p.room_id] = p.url;
+  }
 
   const list = data.map(r => {
     const user = r.sjj_user;
@@ -340,6 +371,13 @@ router.get('/list', optionalAuth, async (req, res) => {
       subway_line: parseSubwayLine(r.subway_line),
       pref_gender: r.pref_gender,
       share_total: calcShareTotal(share_rent, share_maint, r.share_rent_type, r.share_maint_type),
+      house_type: r.house_type,
+      recruit_count: r.recruit_count,
+      move_in_type: r.move_in_type,
+      avoid_smoke: r.avoid_smoke,
+      pers_type: prof?.pers_type,
+      clean_level: r.clean_level,
+      cover_photo: r.photo_public === false ? null : (coverMap[r.id] || null),
     };
   });
 
@@ -349,6 +387,25 @@ router.get('/list', optionalAuth, async (req, res) => {
     has_more: offset + data.length < (count ?? 0),
     list,
   });
+});
+
+// GET /api/room/count?region=서울&district=성북구&subway_stn=강남역 — 필터 적용 시 결과 개수만 조회 (필터 모달 미리보기용)
+router.get('/count', async (req, res) => {
+  const { region, district, subway_stn } = req.query;
+
+  let query = supabaseAdmin
+    .from('sjj_room')
+    .select('id', { count: 'exact', head: true })
+    .eq('is_active', true);
+
+  if (region) query = query.ilike('region', `${region}%`);
+  if (district) query = query.ilike('district', `${district}%`);
+  if (subway_stn) query = query.eq('subway_stn', subway_stn);
+
+  const { count, error } = await query;
+  if (error) return res.status(500).json({ code: 'COUNT_FAILED', error: '개수 조회에 실패했습니다. 잠시 후 다시 시도해주세요' });
+
+  res.json({ total: count ?? 0 });
 });
 
 // GET /api/room/applications/received — 내가 받은 신청 목록 (내 공고들에 들어온 신청)
@@ -529,6 +586,16 @@ router.get('/:id', optionalAuth, async (req, res) => {
   const share_rent = calcShare(data.rent, data.share_rent_type, data.share_rent_amount);
   const share_maint = calcShare(data.maint_fee, data.share_maint_type, data.share_maint_amount);
 
+  let photos = [];
+  if (data.photo_public !== false) {
+    const { data: photoRows } = await supabaseAdmin
+      .from('sjj_room_photo')
+      .select('url')
+      .eq('room_id', data.id)
+      .order('sort_order', { ascending: true });
+    photos = (photoRows || []).map(p => p.url);
+  }
+
   res.json({
     id: data.id,
     locked: false,
@@ -559,6 +626,16 @@ router.get('/:id', optionalAuth, async (req, res) => {
     clean_freq: prof?.clean_freq,
     drink_freq: prof?.drink_freq,
     smoking: prof?.smoking,
+    house_type: data.house_type,
+    deposit: data.deposit,
+    recruit_count: data.recruit_count,
+    move_in_type: data.move_in_type,
+    utility_separate: data.utility_separate,
+    furniture_included: data.furniture_included,
+    private_room_count: data.private_room_count,
+    clean_level: data.clean_level,
+    photo_public: data.photo_public,
+    photos,
   });
 });
 
