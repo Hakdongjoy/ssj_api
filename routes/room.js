@@ -129,7 +129,7 @@ router.post('/register', verifyToken, async (req, res) => {
   const user_id = req.user.id;
   const {
     // 지역 + 비용 (sjj_room)
-    region, district, subway_stn,
+    region, district, subway_stn, walk_min,
     rent, maint_fee,
     pref_gender, restrict_gender,
     share_rent_type, share_rent_amount,
@@ -173,7 +173,7 @@ router.post('/register', verifyToken, async (req, res) => {
     .from('sjj_room')
     .insert({
       user_id,
-      region, district, subway_stn: canonicalSubwayStn, subway_line,
+      region, district, subway_stn: canonicalSubwayStn, subway_line, walk_min,
       rent, maint_fee,
       pref_gender, restrict_gender,
       share_rent_type, share_rent_amount,
@@ -312,7 +312,7 @@ router.get('/station-search', async (req, res) => {
 // 조건필터(생활조건/동거인조건/비용) 중 sjj_room 컬럼으로 바로 거는 조건들. list/count가 공유.
 function applyRoomFilters(query, qp) {
   const {
-    region, district, subway_stn, house_type, pref_gender, clean_level,
+    region, district, subway_stn, walk_min_max, house_type, pref_gender, clean_level,
     avoid_smoke, avoid_drink, avoid_pet,
     deposit_min, deposit_max, rent_min, rent_max,
   } = qp;
@@ -320,6 +320,8 @@ function applyRoomFilters(query, qp) {
   if (region) query = query.ilike('region', `${region}%`);
   if (district) query = query.ilike('district', `${district}%`);
   if (subway_stn) query = query.eq('subway_stn', subway_stn);
+  // walk_min을 입력 안 한 공고(null)는 거리 필터를 걸면 항상 제외됨
+  if (walk_min_max) query = query.lte('walk_min', Number(walk_min_max));
   if (house_type) query = query.eq('house_type', house_type);
   if (clean_level) query = query.eq('clean_level', clean_level);
   if (avoid_smoke === 'true') query = query.eq('avoid_smoke', true);
@@ -399,7 +401,7 @@ router.get('/list', optionalAuth, async (req, res) => {
 
   let query = supabaseAdmin
     .from('sjj_room')
-    .select('id, user_id, region, district, subway_stn, subway_line, rent, maint_fee, pref_gender, restrict_gender, share_rent_type, share_rent_amount, share_maint_type, share_maint_amount, house_type, recruit_count, move_in_type, avoid_smoke, photo_public, clean_level, sjj_user!user_id(nick, gender, birth)', { count: 'exact' })
+    .select('id, user_id, region, district, subway_stn, subway_line, walk_min, rent, maint_fee, pref_gender, restrict_gender, share_rent_type, share_rent_amount, share_maint_type, share_maint_amount, house_type, recruit_count, move_in_type, avoid_smoke, photo_public, clean_level, sjj_user!user_id(nick, gender, birth)', { count: 'exact' })
     .eq('is_active', true)
     .order('created_at', { ascending: false })
     .range(offset, offset + safeLimit - 1);
@@ -450,6 +452,7 @@ router.get('/list', optionalAuth, async (req, res) => {
       district: r.district,
       subway_stn: r.subway_stn,
       subway_line: parseSubwayLine(r.subway_line),
+      walk_min: r.walk_min,
       pref_gender: r.pref_gender,
       share_total: calcShareTotal(share_rent, share_maint, r.share_rent_type, r.share_maint_type),
       house_type: r.house_type,
@@ -689,6 +692,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
     district: data.district,
     subway_stn: data.subway_stn,
     subway_line: parseSubwayLine(data.subway_line),
+    walk_min: data.walk_min,
     rent: data.rent,
     maint_fee: data.maint_fee,
     share_rent_type: data.share_rent_type,
