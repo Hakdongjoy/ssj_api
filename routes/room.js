@@ -27,6 +27,24 @@ function calcShareTotal(rentShare, maintShare, rentType, maintType) {
   return null;
 }
 
+// 공고등록 리뉴얼(9_register_new_*) 이후: share_rent_type/share_maint_type 개별 방식 대신
+// (월세+관리비) 합산에 단일 퍼센트(share_percent)를 적용하는 방식으로 교체됨
+function calcShareTotalPercent(rent, maint_fee, share_percent) {
+  if (share_percent == null) return null;
+  const total = (rent || 0) + (maint_fee || 0);
+  return Math.round(total * share_percent / 100);
+}
+
+// share_percent가 있으면 새 방식, 없으면(리뉴얼 이전 공고) 기존 share_rent_type/share_maint_type 방식으로 폴백
+function resolveShareTotal(room) {
+  if (room.share_percent != null) {
+    return calcShareTotalPercent(room.rent, room.maint_fee, room.share_percent);
+  }
+  const share_rent = calcShare(room.rent, room.share_rent_type, room.share_rent_amount);
+  const share_maint = calcShare(room.maint_fee, room.share_maint_type, room.share_maint_amount);
+  return calcShareTotal(share_rent, share_maint, room.share_rent_type, room.share_maint_type);
+}
+
 // DB엔 콤마로 이어붙인 slug 문자열로 저장, 응답에선 배열로 변환
 function parseSubwayLine(subway_line) {
   return subway_line ? subway_line.split(',') : [];
@@ -124,47 +142,33 @@ async function resolveSubwayLine(region, subway_stn) {
   return { line: sortLineSlugs(slugs).join(','), canonicalName };
 }
 
-// POST /api/room/register — 방 있는 사람 공고 등록
+// POST /api/room/register — 방 있는 사람 공고 등록 (9_register_new_* 리뉴얼 플로우 기준)
 router.post('/register', verifyToken, async (req, res) => {
   const user_id = req.user.id;
   const {
-    // 지역 + 비용 (sjj_room)
-    region, district, subway_stn, walk_min,
-    rent, maint_fee,
-    pref_gender, restrict_gender,
-    share_rent_type, share_rent_amount,
-    share_maint_type, share_maint_amount,
-    avoid_smoke, avoid_drink, avoid_pet,
-    bio,
+    // 위치
+    region, district, dong, road_address, detail_address, subway_stn, walk_min,
+    // 공고 제목/소개
+    title, bio,
+    // 공간 정보
+    house_type, house_type_input, shared_spaces,
+    // 비용 정보
+    rent, maint_fee, utility_separate, share_percent,
+    recruit_count, move_in_type,
+    private_room_count, furniture_included,
+    // 생활 조건 (공고 단위)
+    smoking_policy, drink_freq, pet_policy, activity_time, clean_importance, noise_lifestyle,
+    // 원하는 동거인
+    pref_gender, restrict_gender, pref_age_range, pref_job, pref_tags,
+    // 동의
     profile_agree, location_agree, push_agree, marketing_agree,
-    house_type, deposit, recruit_count, move_in_type,
-    utility_separate, furniture_included, private_room_count, clean_level,
+    // 사진
     photo_public, photo_urls,
-    // 추가정보 (sjj_user_info)
-    job, job_input, is_remote,
-    sleep_hour, wake_hour,
-    pers_type, home_time, clean_freq, drink_freq,
-    smoking, pet, pet_type, pet_type_input, pet_name, pet_memo,
   } = req.body;
   console.log('[room/register] 요청 user_id:', user_id);
 
   if (profile_agree !== true) {
     return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: '필요한 정보를 모두 입력했는지 다시 확인해주세요', fields: ['profile_agree'] });
-  }
-
-  const { error: profError } = await supabaseAdmin
-    .from('sjj_user_info')
-    .upsert({
-      user_id,
-      job, job_input, is_remote,
-      sleep_hour, wake_hour,
-      pers_type, home_time, clean_freq, drink_freq,
-      smoking, pet, pet_type, pet_type_input, pet_name, pet_memo,
-    }, { onConflict: 'user_id' });
-
-  if (profError) {
-    console.error('[room/register] prof 실패:', profError.message);
-    return res.status(500).json({ code: 'PROF_SAVE_FAILED', error: '저장에 실패했습니다. 잠시 후 다시 시도해주세요' });
   }
 
   const { line: subway_line, canonicalName: canonicalSubwayStn } = await resolveSubwayLine(region, subway_stn);
@@ -173,16 +177,16 @@ router.post('/register', verifyToken, async (req, res) => {
     .from('sjj_room')
     .insert({
       user_id,
-      region, district, subway_stn: canonicalSubwayStn, subway_line, walk_min,
-      rent, maint_fee,
-      pref_gender, restrict_gender,
-      share_rent_type, share_rent_amount,
-      share_maint_type, share_maint_amount,
-      avoid_smoke, avoid_drink, avoid_pet,
-      bio,
+      region, district, dong, road_address, detail_address,
+      subway_stn: canonicalSubwayStn, subway_line, walk_min,
+      title, bio,
+      house_type, house_type_input, shared_spaces,
+      rent, maint_fee, utility_separate, share_percent,
+      recruit_count, move_in_type,
+      private_room_count, furniture_included,
+      smoking_policy, drink_freq, pet_policy, activity_time, clean_importance, noise_lifestyle,
+      pref_gender, restrict_gender, pref_age_range, pref_job, pref_tags,
       profile_agree, location_agree, push_agree, marketing_agree,
-      house_type, deposit, recruit_count, move_in_type,
-      utility_separate, furniture_included, private_room_count, clean_level,
       photo_public,
       is_active: true,
     })
@@ -309,12 +313,13 @@ router.get('/station-search', async (req, res) => {
   res.json({ stations });
 });
 
-// 조건필터(생활조건/동거인조건/비용) 중 sjj_room 컬럼으로 바로 거는 조건들. list/count가 공유.
+// 조건필터(생활조건/동거인조건/비용) — 리뉴얼 이후 전부 sjj_room 컬럼이라 조인 없이 바로 필터링. list/count가 공유.
 function applyRoomFilters(query, qp) {
   const {
-    region, district, subway_stn, walk_min_max, house_type, pref_gender, clean_level,
-    avoid_smoke, avoid_drink, avoid_pet,
-    deposit_min, deposit_max, rent_min, rent_max,
+    region, district, subway_stn, walk_min_max, house_type, pref_gender,
+    smoking_policy, drink_freq, pet_policy, noise_lifestyle, clean_importance,
+    pref_age_range, pref_job,
+    rent_min, rent_max,
   } = qp;
 
   if (region) query = query.ilike('region', `${region}%`);
@@ -323,69 +328,20 @@ function applyRoomFilters(query, qp) {
   // walk_min을 입력 안 한 공고(null)는 거리 필터를 걸면 항상 제외됨
   if (walk_min_max) query = query.lte('walk_min', Number(walk_min_max));
   if (house_type) query = query.eq('house_type', house_type);
-  if (clean_level) query = query.eq('clean_level', clean_level);
-  if (avoid_smoke === 'true') query = query.eq('avoid_smoke', true);
-  if (avoid_drink === 'true') query = query.eq('avoid_drink', true);
-  if (avoid_pet === 'true') query = query.eq('avoid_pet', true);
+  if (smoking_policy) query = query.eq('smoking_policy', smoking_policy);
+  if (drink_freq) query = query.eq('drink_freq', drink_freq);
+  if (pet_policy) query = query.eq('pet_policy', pet_policy);
+  if (noise_lifestyle) query = query.eq('noise_lifestyle', noise_lifestyle);
+  if (clean_importance) query = query.eq('clean_importance', clean_importance);
   // 성별 무관(any) 공고는 어떤 성별로 필터링해도 항상 포함
   if (pref_gender && pref_gender !== 'any') query = query.in('pref_gender', ['any', pref_gender]);
-  if (deposit_min) query = query.gte('deposit', Number(deposit_min));
-  if (deposit_max) query = query.lte('deposit', Number(deposit_max));
+  // 등록자가 연령대/직업을 "상관없음"(null)으로 뒀으면 어떤 값으로 필터링해도 항상 포함
+  if (pref_age_range) query = query.or(`pref_age_range.eq.${pref_age_range},pref_age_range.is.null`);
+  if (pref_job) query = query.or(`pref_job.eq.${pref_job},pref_job.is.null`);
   if (rent_min) query = query.gte('rent', Number(rent_min));
   if (rent_max) query = query.lte('rent', Number(rent_max));
 
   return query;
-}
-
-// age_range("20"/"30"/"40") → 만 나이가 아니라 calcAge와 동일한 한국 나이 기준 출생연도 범위로 변환
-// 나이 = 현재연도 - 출생연도 + 1  ->  출생연도 = 현재연도 - 나이 + 1
-function ageRangeToBirthYearBounds(age_range) {
-  const currentYear = new Date().getFullYear();
-  let minAge, maxAge;
-  if (age_range === '20') { minAge = 20; maxAge = 29; }
-  else if (age_range === '30') { minAge = 30; maxAge = 39; }
-  else if (age_range === '40') { minAge = 40; maxAge = 150; }
-  else return null;
-
-  return {
-    minBirthYear: maxAge >= 150 ? 1900 : currentYear - maxAge + 1,
-    maxBirthYear: currentYear - minAge + 1,
-  };
-}
-
-// 조건필터 중 sjj_user_info(직업/생활스타일/흡연상태/음주빈도/반려동물보유)·sjj_user(연령대) 컬럼으로 걸리는 조건 — room과 user_id로 조인해야 해서 먼저 user_id 목록을 구함.
-// 반환값 null이면 "필터 없음"(= 전체), 배열이면 그 user_id들로만 제한 (빈 배열이면 결과 0건). 여러 조건이 같이 오면 교집합.
-async function resolveFilteredUserIds(qp) {
-  const { job, pers_type, smoking, drink_freq, pet, age_range } = qp;
-  const idSets = [];
-
-  if (job || pers_type || smoking || drink_freq || pet) {
-    let query = supabaseAdmin.from('sjj_user_info').select('user_id');
-    if (job) query = query.eq('job', job);
-    if (pers_type) query = query.eq('pers_type', pers_type);
-    if (smoking) query = query.eq('smoking', smoking);
-    if (drink_freq) query = query.eq('drink_freq', drink_freq);
-    if (pet) query = query.eq('pet', pet === 'true');
-    const { data } = await query;
-    idSets.push(new Set((data || []).map(d => d.user_id)));
-  }
-
-  const bounds = ageRangeToBirthYearBounds(age_range);
-  if (bounds) {
-    const { data } = await supabaseAdmin
-      .from('sjj_user')
-      .select('id')
-      .gte('birth', `${bounds.minBirthYear}-01-01`)
-      .lte('birth', `${bounds.maxBirthYear}-12-31`);
-    idSets.push(new Set((data || []).map(d => d.id)));
-  }
-
-  if (idSets.length === 0) return null;
-  let result = [...idSets[0]];
-  for (let i = 1; i < idSets.length; i++) {
-    result = result.filter(id => idSets[i].has(id));
-  }
-  return result;
 }
 
 // GET /api/room/list?region=서울&district=성북구&subway_stn=강남역&page=1&limit=7 — 인증 선택 (있으면 조회자 성별로 제한 공고 필터링)
@@ -394,20 +350,14 @@ router.get('/list', optionalAuth, async (req, res) => {
   const safeLimit = Math.min(Number(limit) || 7, 50);
   const offset = (Number(page) - 1) * safeLimit;
 
-  const filteredUserIds = await resolveFilteredUserIds(req.query);
-  if (filteredUserIds && filteredUserIds.length === 0) {
-    return res.json({ total: 0, page: Number(page), has_more: false, list: [] });
-  }
-
   let query = supabaseAdmin
     .from('sjj_room')
-    .select('id, user_id, region, district, subway_stn, subway_line, walk_min, rent, maint_fee, pref_gender, restrict_gender, share_rent_type, share_rent_amount, share_maint_type, share_maint_amount, house_type, recruit_count, move_in_type, avoid_smoke, photo_public, clean_level, sjj_user!user_id(nick, gender, birth)', { count: 'exact' })
+    .select('id, user_id, region, district, dong, subway_stn, subway_line, walk_min, title, rent, maint_fee, utility_separate, share_percent, share_rent_type, share_rent_amount, share_maint_type, share_maint_amount, pref_gender, restrict_gender, house_type, recruit_count, move_in_type, smoking_policy, pet_policy, noise_lifestyle, clean_importance, pref_tags, photo_public, sjj_user!user_id(nick, gender, birth)', { count: 'exact' })
     .eq('is_active', true)
     .order('created_at', { ascending: false })
     .range(offset, offset + safeLimit - 1);
 
   query = applyRoomFilters(query, req.query);
-  if (filteredUserIds) query = query.in('user_id', filteredUserIds);
 
   const { data, error, count } = await query;
 
@@ -440,8 +390,6 @@ router.get('/list', optionalAuth, async (req, res) => {
   const list = data.map(r => {
     const user = r.sjj_user;
     const prof = profMap[r.user_id];
-    const share_rent = calcShare(r.rent, r.share_rent_type, r.share_rent_amount);
-    const share_maint = calcShare(r.maint_fee, r.share_maint_type, r.share_maint_amount);
     return {
       id: r.id,
       nick: user?.nick,
@@ -450,17 +398,21 @@ router.get('/list', optionalAuth, async (req, res) => {
       job: prof?.job,
       region: r.region,
       district: r.district,
+      dong: r.dong,
       subway_stn: r.subway_stn,
       subway_line: parseSubwayLine(r.subway_line),
       walk_min: r.walk_min,
+      title: r.title,
       pref_gender: r.pref_gender,
-      share_total: calcShareTotal(share_rent, share_maint, r.share_rent_type, r.share_maint_type),
+      share_total: resolveShareTotal(r),
       house_type: r.house_type,
       recruit_count: r.recruit_count,
       move_in_type: r.move_in_type,
-      avoid_smoke: r.avoid_smoke,
-      pers_type: prof?.pers_type,
-      clean_level: r.clean_level,
+      smoking_policy: r.smoking_policy,
+      pet_policy: r.pet_policy,
+      noise_lifestyle: r.noise_lifestyle,
+      clean_importance: r.clean_importance,
+      pref_tags: r.pref_tags || [],
       cover_photo: r.photo_public === false ? null : (coverMap[r.id] || null),
     };
   });
@@ -475,18 +427,12 @@ router.get('/list', optionalAuth, async (req, res) => {
 
 // GET /api/room/count?region=서울&district=성북구&subway_stn=강남역 — 필터 적용 시 결과 개수만 조회 (필터 모달 미리보기용)
 router.get('/count', async (req, res) => {
-  const filteredUserIds = await resolveFilteredUserIds(req.query);
-  if (filteredUserIds && filteredUserIds.length === 0) {
-    return res.json({ total: 0 });
-  }
-
   let query = supabaseAdmin
     .from('sjj_room')
     .select('id', { count: 'exact', head: true })
     .eq('is_active', true);
 
   query = applyRoomFilters(query, req.query);
-  if (filteredUserIds) query = query.in('user_id', filteredUserIds);
 
   const { count, error } = await query;
   if (error) return res.status(500).json({ code: 'COUNT_FAILED', error: '개수 조회에 실패했습니다. 잠시 후 다시 시도해주세요' });
@@ -662,15 +608,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
     }
   }
 
-  const { data: prof } = await supabaseAdmin
-    .from('sjj_user_info')
-    .select('job, sleep_hour, wake_hour, pers_type, home_time, clean_freq, drink_freq, smoking')
-    .eq('user_id', data.user_id)
-    .single();
-
   const user = data.sjj_user;
-  const share_rent = calcShare(data.rent, data.share_rent_type, data.share_rent_amount);
-  const share_maint = calcShare(data.maint_fee, data.share_maint_type, data.share_maint_amount);
 
   let photos = [];
   if (data.photo_public !== false) {
@@ -682,6 +620,22 @@ router.get('/:id', optionalAuth, async (req, res) => {
     photos = (photoRows || []).map(p => p.url);
   }
 
+  // 도로명주소/상세주소는 매칭 전까지 비공개 — 본인(호스트) 또는 수락된 신청자(sjj_chat_room)만 조회 가능
+  let addressVisible = false;
+  if (req.user) {
+    if (req.user.id === data.user_id) {
+      addressVisible = true;
+    } else {
+      const { data: chatRoom } = await supabaseAdmin
+        .from('sjj_chat_room')
+        .select('id')
+        .eq('room_id', data.id)
+        .eq('applicant_id', req.user.id)
+        .maybeSingle();
+      addressVisible = !!chatRoom;
+    }
+  }
+
   res.json({
     id: data.id,
     locked: false,
@@ -690,37 +644,36 @@ router.get('/:id', optionalAuth, async (req, res) => {
     age: calcAge(user?.birth),
     region: data.region,
     district: data.district,
+    dong: data.dong,
+    road_address: addressVisible ? data.road_address : null,
+    detail_address: addressVisible ? data.detail_address : null,
     subway_stn: data.subway_stn,
     subway_line: parseSubwayLine(data.subway_line),
     walk_min: data.walk_min,
+    title: data.title,
+    bio: data.bio,
     rent: data.rent,
     maint_fee: data.maint_fee,
-    share_rent_type: data.share_rent_type,
-    share_rent: formatShare(share_rent, data.share_rent_type),
-    share_maint_type: data.share_maint_type,
-    share_maint: formatShare(share_maint, data.share_maint_type),
-    share_total: calcShareTotal(share_rent, share_maint, data.share_rent_type, data.share_maint_type),
+    utility_separate: data.utility_separate,
+    share_percent: data.share_percent,
+    share_total: resolveShareTotal(data),
     pref_gender: data.pref_gender,
-    avoid_smoke: data.avoid_smoke,
-    avoid_drink: data.avoid_drink,
-    avoid_pet: data.avoid_pet,
-    bio: data.bio,
-    job: prof?.job,
-    sleep_hour: prof?.sleep_hour,
-    wake_hour: prof?.wake_hour,
-    pers_type: prof?.pers_type,
-    home_time: prof?.home_time,
-    clean_freq: prof?.clean_freq,
-    drink_freq: prof?.drink_freq,
-    smoking: prof?.smoking,
     house_type: data.house_type,
-    deposit: data.deposit,
+    house_type_input: data.house_type_input,
+    shared_spaces: data.shared_spaces || [],
     recruit_count: data.recruit_count,
     move_in_type: data.move_in_type,
-    utility_separate: data.utility_separate,
-    furniture_included: data.furniture_included,
     private_room_count: data.private_room_count,
-    clean_level: data.clean_level,
+    furniture_included: data.furniture_included,
+    smoking_policy: data.smoking_policy,
+    drink_freq: data.drink_freq,
+    pet_policy: data.pet_policy,
+    activity_time: data.activity_time,
+    clean_importance: data.clean_importance,
+    noise_lifestyle: data.noise_lifestyle,
+    pref_age_range: data.pref_age_range,
+    pref_job: data.pref_job,
+    pref_tags: data.pref_tags || [],
     photo_public: data.photo_public,
     photos,
   });
