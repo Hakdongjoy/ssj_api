@@ -530,7 +530,7 @@ router.patch('/applications/:applyId', verifyToken, async (req, res) => {
     return res.json({ success: true, status: 'rejected' });
   }
 
-  // 수락: 공고 비활성화 + 다른 대기중 신청 자동 거절 + 채팅방 생성
+  // 수락: 공고 비활성화 + 다른 대기중 신청 자동 거절 (채팅방은 이미 존재 — apply/inquire 시점에 생성·연결돼있음)
   await supabaseAdmin.from('sjj_room').update({ is_active: false }).eq('id', apply.room_id);
   await supabaseAdmin
     .from('sjj_room_apply')
@@ -538,21 +538,63 @@ router.patch('/applications/:applyId', verifyToken, async (req, res) => {
     .eq('room_id', apply.room_id)
     .eq('status', 'pending');
 
+  const { data: chatRoom } = await supabaseAdmin
+    .from('sjj_chat_room')
+    .select('id')
+    .eq('apply_id', apply.id)
+    .maybeSingle();
+
+  res.json({ success: true, status: 'accepted', chat_room_id: chatRoom?.id ?? null });
+});
+
+// 채팅 첫 진입 시 호스트 명의로 자동 삽입되는 고정 인사말
+const CHAT_GREETING_TEMPLATE = '안녕하세요. 관심 주셔서 감사해요. 아직 함께 살 분을 찾고 있어요. 편하게 물어봐주세요 :)';
+
+// POST /api/room/:id/inquire — "문의하기". 신청 전에 먼저 채팅방을 열어줌 (이미 열려있으면 그 채팅방을 그대로 반환)
+router.post('/:id/inquire', verifyToken, async (req, res) => {
+  const user_id = req.user.id;
+  const { id: room_id } = req.params;
+
+  const { data: room, error: roomError } = await supabaseAdmin
+    .from('sjj_room')
+    .select('id, user_id, is_active')
+    .eq('id', room_id)
+    .single();
+
+  if (roomError || !room) return res.status(404).json({ code: 'ROOM_NOT_FOUND', error: '공고를 찾을 수 없습니다' });
+  if (!room.is_active) return res.status(400).json({ code: 'ROOM_NOT_ACTIVE', error: '이미 마감된 공고입니다' });
+  if (room.user_id === user_id) return res.status(400).json({ code: 'SELF_INQUIRE_FORBIDDEN', error: '본인 공고에는 문의할 수 없습니다' });
+
+  const { data: existing } = await supabaseAdmin
+    .from('sjj_chat_room')
+    .select('id')
+    .eq('room_id', room_id)
+    .eq('applicant_id', user_id)
+    .maybeSingle();
+
+  if (existing) {
+    return res.json({ success: true, chat_room_id: existing.id });
+  }
+
   const { data: chatRoom, error: chatError } = await supabaseAdmin
     .from('sjj_chat_room')
-    .insert({ apply_id: apply.id, room_id: apply.room_id, owner_id: user_id, applicant_id: apply.applicant_id })
+    .insert({ room_id, owner_id: room.user_id, applicant_id: user_id })
     .select('id')
     .single();
 
   if (chatError) {
-    console.error('[applications/:applyId] 채팅방 생성 실패:', chatError.message);
-    return res.status(500).json({ code: 'CHAT_ROOM_CREATE_FAILED', error: '처리에 실패했습니다. 잠시 후 다시 시도해주세요' });
+    console.error('[room/inquire] 채팅방 생성 실패:', chatError.message);
+    return res.status(500).json({ code: 'INQUIRE_FAILED', error: '문의에 실패했습니다. 잠시 후 다시 시도해주세요' });
   }
 
-  res.json({ success: true, status: 'accepted', chat_room_id: chatRoom.id });
+  await supabaseAdmin
+    .from('sjj_chat_message')
+    .insert({ chat_room_id: chatRoom.id, sender_id: room.user_id, content: CHAT_GREETING_TEMPLATE });
+
+  res.json({ success: true, chat_room_id: chatRoom.id });
 });
 
-// POST /api/room/:id/apply — 살짝 신청하기
+// POST /api/room/:id/apply — "함께 살기로 요청" (채팅방 안에서 호출). 채팅방이 없으면(문의 단계 건너뛴 경우) 방어적으로 새로 생성
 router.post('/:id/apply', verifyToken, async (req, res) => {
   const user_id = req.user.id;
   const { id: room_id } = req.params;
@@ -582,7 +624,27 @@ router.post('/:id/apply', verifyToken, async (req, res) => {
     return res.status(500).json({ code: 'APPLY_FAILED', error: '신청에 실패했습니다. 잠시 후 다시 시도해주세요' });
   }
 
-  res.json({ success: true, apply_id: apply.id, status: apply.status });
+  const { data: chatRoom } = await supabaseAdmin
+    .from('sjj_chat_room')
+    .select('id')
+    .eq('room_id', room_id)
+    .eq('applicant_id', user_id)
+    .maybeSingle();
+
+  let chat_room_id = chatRoom?.id ?? null;
+  if (chatRoom) {
+    await supabaseAdmin.from('sjj_chat_room').update({ apply_id: apply.id }).eq('id', chatRoom.id);
+  } else {
+    const { data: newChatRoom, error: chatError } = await supabaseAdmin
+      .from('sjj_chat_room')
+      .insert({ apply_id: apply.id, room_id, owner_id: room.user_id, applicant_id: user_id })
+      .select('id')
+      .single();
+    if (chatError) console.error('[room/apply] 채팅방 연결 실패:', chatError.message);
+    chat_room_id = newChatRoom?.id ?? null;
+  }
+
+  res.json({ success: true, apply_id: apply.id, status: apply.status, chat_room_id });
 });
 
 // GET /api/room/:id — 인증 선택 (있으면 조회자 성별로 제한 공고 필터링)

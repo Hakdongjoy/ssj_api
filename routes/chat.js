@@ -9,7 +9,7 @@ router.get('/rooms', verifyToken, async (req, res) => {
 
   const { data, error } = await supabaseAdmin
     .from('sjj_chat_room')
-    .select('id, room_id, owner_id, applicant_id, created_at, sjj_room!room_id(district, subway_stn)')
+    .select('id, room_id, owner_id, applicant_id, apply_id, created_at, sjj_room!room_id(district, subway_stn), sjj_room_apply!apply_id(status)')
     .or(`owner_id.eq.${user_id},applicant_id.eq.${user_id}`)
     .order('created_at', { ascending: false });
 
@@ -25,6 +25,9 @@ router.get('/rooms', verifyToken, async (req, res) => {
     room_district: r.sjj_room?.district,
     room_subway_stn: r.sjj_room?.subway_stn,
     partner_nick: partnerMap[r.owner_id === user_id ? r.applicant_id : r.owner_id],
+    is_owner: r.owner_id === user_id,
+    apply_id: r.apply_id,
+    apply_status: r.sjj_room_apply?.status ?? null, // null=아직 신청 전(문의만 함) / pending / accepted / rejected
     created_at: r.created_at,
   }));
 
