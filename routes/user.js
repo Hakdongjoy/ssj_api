@@ -81,4 +81,53 @@ router.post('/pref', verifyToken, async (req, res) => {
   res.json({ success: true });
 });
 
+// DELETE /api/user/me — 회원 탈퇴 (소프트 삭제/익명화)
+// 주의: sjj_user.id가 auth.users를 FK로 참조하며 on delete cascade가 걸려있어서,
+// auth 계정을 먼저 삭제(deleteUser)하면 sjj_user 행 자체가 같이 사라져 익명화가 무의미해짐.
+// 그래서 auth 계정은 "삭제"가 아니라 "영구 정지(ban)"로 처리 — 로그인만 막고 행은 그대로 둠.
+router.delete('/me', verifyToken, async (req, res) => {
+  const user_id = req.user.id;
+
+  // 1. sjj_user 익명화 (행은 유지) — auth 쪽보다 먼저 처리해서 혹시 모를 레이스 방지
+  const { error: userError } = await supabaseAdmin
+    .from('sjj_user')
+    .update({ nick: '탈퇴한 사용자', phone: null, deleted_at: new Date().toISOString() })
+    .eq('id', user_id);
+  if (userError) {
+    console.error('[withdraw] sjj_user 익명화 실패:', userError.message);
+  }
+
+  // 2. 이 유저가 올린 활성 공고 비활성화
+  const { error: roomError } = await supabaseAdmin
+    .from('sjj_room')
+    .update({ is_active: false })
+    .eq('user_id', user_id)
+    .eq('is_active', true);
+  if (roomError) {
+    console.error('[withdraw] sjj_room 비활성화 실패:', roomError.message);
+  }
+
+  // 3. 개인 프로필 데이터 삭제
+  const { error: infoError } = await supabaseAdmin.from('sjj_user_info').delete().eq('user_id', user_id);
+  if (infoError) {
+    console.error('[withdraw] sjj_user_info 삭제 실패:', infoError.message);
+  }
+
+  const { error: prefError } = await supabaseAdmin.from('sjj_room_pref').delete().eq('user_id', user_id);
+  if (prefError) {
+    console.error('[withdraw] sjj_room_pref 삭제 실패:', prefError.message);
+  }
+
+  // 4. sjj_room_apply, sjj_chat_room, sjj_chat_message는 그대로 유지 (상대방 기록 보존)
+
+  // 5. Auth 계정은 삭제 대신 영구 정지 — 실패 시에만 500 (로그인 차단 자체가 안 되면 탈퇴 실패로 취급)
+  const { error: banError } = await supabaseAdmin.auth.admin.updateUserById(user_id, { ban_duration: '876000h' });
+  if (banError) {
+    console.error('[withdraw] auth 계정 정지 실패:', banError.message);
+    return res.status(500).json({ code: 'WITHDRAW_FAILED', error: '회원 탈퇴에 실패했습니다. 잠시 후 다시 시도해주세요' });
+  }
+
+  res.json({ success: true });
+});
+
 module.exports = router;
