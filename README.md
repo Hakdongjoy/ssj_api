@@ -48,7 +48,7 @@ ssj/
 | POST | `/api/room/register` | 🔒 | 공고 등록 |
 | GET | `/api/room/region_cnt` | - | 광역/시군구별 공고 개수 (지역선택용) |
 | GET | `/api/room/station-search` | - | 역 검색 자동완성 |
-| GET | `/api/room/address-search` | - | 주소 입력 시 가까운 지하철역 + 도보시간 자동계산 (카카오 로컬 API) |
+| GET | `/api/room/address-search` | - | 주소 입력 시 가까운 지하철역 + 도보시간 자동계산 (단일 결과, 카카오 로컬 API) |
 | GET | `/api/room/list` | - | 공고 목록 (무한스크롤, 최초 7개) |
 | GET | `/api/room/count` | - | 필터 적용 시 결과 개수만 조회 (필터 모달 미리보기용) |
 | GET | `/api/room/:id` | - | 공고 상세 |

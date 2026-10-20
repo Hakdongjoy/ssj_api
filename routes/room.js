@@ -370,16 +370,14 @@ function pickNearestStation(groups, lat, lng) {
   };
 }
 
-// GET /api/room/address-search?q=테헤란로 123&limit=10 — 주소를 입력받아 가까운 지하철역 + 도보시간을 자동계산 (주소 자동완성은 그 과정에서 거치는 수단)
+// GET /api/room/address-search?q=테헤란로 123 — 주소를 입력받아 가까운 지하철역 + 도보시간을 자동계산 (주소 검색은 그 과정에서 거치는 수단, 가장 유력한 주소 1건만 사용)
 router.get('/address-search', async (req, res) => {
-  const { q, limit = 10 } = req.query;
-  if (!q) return res.json({ addresses: [] });
-
-  const safeLimit = Math.min(Number(limit) || 10, 30);
+  const { q } = req.query;
+  if (!q) return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: '주소를 입력해주세요' });
 
   try {
     const kakaoRes = await fetch(
-      `https://dapi.kakao.com/v2/local/search/address.json?query=${encodeURIComponent(q)}&size=${safeLimit}`,
+      `https://dapi.kakao.com/v2/local/search/address.json?query=${encodeURIComponent(q)}&size=1`,
       { headers: { Authorization: `KakaoAK ${process.env.KAKAO_REST_API_KEY}` } }
     );
     const data = await kakaoRes.json();
@@ -389,24 +387,21 @@ router.get('/address-search', async (req, res) => {
       return res.status(500).json({ code: 'ADDRESS_SEARCH_FAILED', error: '주소 검색에 실패했습니다. 잠시 후 다시 시도해주세요' });
     }
 
-    // 역 목록은 주소 후보 개수와 무관하게 한 번만 불러와서 재사용
+    const best = (data.documents || [])[0];
+    if (!best) return res.status(404).json({ code: 'ADDRESS_NOT_FOUND', error: '입력한 주소를 찾을 수 없어요' });
+
+    const lat = Number(best.y);
+    const lng = Number(best.x);
     const stationGroups = await loadStationGroups();
+    const nearest = stationGroups ? pickNearestStation(stationGroups, lat, lng) : null;
 
-    const addresses = (data.documents || []).map(d => {
-      const lat = Number(d.y);
-      const lng = Number(d.x);
-      return {
-        road_address: d.road_address?.address_name ?? null,
-        jibun_address: d.address?.address_name ?? null,
-        region_1depth: d.address?.region_1depth_name ?? null,
-        region_2depth: d.address?.region_2depth_name ?? null,
-        region_3depth: d.address?.region_3depth_name ?? null,
-        lat, lng,
-        nearest_station: stationGroups ? pickNearestStation(stationGroups, lat, lng) : null,
-      };
+    res.json({
+      road_address: best.road_address?.address_name ?? null,
+      subway_stn: nearest?.subway_stn ?? null,
+      subway_line: nearest?.subway_line ?? [],
+      distance_m: nearest?.distance_m ?? null,
+      walk_min: nearest?.walk_min ?? null,
     });
-
-    res.json({ addresses });
   } catch (err) {
     console.error('[room/address-search] 실패:', err.message);
     res.status(500).json({ code: 'ADDRESS_SEARCH_FAILED', error: '주소 검색에 실패했습니다. 잠시 후 다시 시도해주세요' });
