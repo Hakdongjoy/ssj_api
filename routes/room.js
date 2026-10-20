@@ -576,6 +576,17 @@ router.patch('/applications/:applyId', verifyToken, async (req, res) => {
       .in('id', otherApplyIds);
   }
 
+  // 문의만 하고 신청은 안 한 사람들(apply_id가 null인 채팅방) — 이 사람들은 위 자동거절 대상이 아니라서 따로 안내
+  const { data: inquireOnlyChatRooms } = await supabaseAdmin
+    .from('sjj_chat_room')
+    .select('id')
+    .eq('room_id', apply.room_id)
+    .is('apply_id', null);
+
+  await Promise.all(
+    (inquireOnlyChatRooms || []).map(cr => insertSystemMessage(cr.id, user_id, '이 공고는 다른 분과 매칭이 완료됐어요.'))
+  );
+
   await insertSystemMessage(thisChatRoom?.id, user_id, '함께 살기로 매칭됐어요! 이제 상세 주소를 확인할 수 있어요.');
 
   res.json({ success: true, status: 'accepted', chat_room_id: thisChatRoom?.id ?? null });
