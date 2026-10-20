@@ -49,6 +49,7 @@ ssj/
 | GET | `/api/room/region_cnt` | - | 광역/시군구별 공고 개수 (지역선택용) |
 | GET | `/api/room/station-search` | - | 역 검색 자동완성 |
 | GET | `/api/room/address-search` | - | 도로명주소 자동완성 (카카오 로컬 API) |
+| GET | `/api/room/nearest-station` | - | 좌표 기준 가까운 역 + 도보시간 자동계산 |
 | GET | `/api/room/list` | - | 공고 목록 (무한스크롤, 최초 7개) |
 | GET | `/api/room/count` | - | 필터 적용 시 결과 개수만 조회 (필터 모달 미리보기용) |
 | GET | `/api/room/:id` | - | 공고 상세 |
@@ -81,7 +82,7 @@ ssj/
 - 🔍 `sjj_room_pref` — 희망조건 (방 없는 사람)
 - 📞 `sjj_phone_verify` — 휴대폰 본인인증
 - 🗺️ `sjj_region` / `sjj_district` — 광역/시군구 마스터
-- 🚇 `sjj_subway_station` — 지하철 역-호선 마스터 (서울/경기/인천 등 세분화된 지역 포함)
+- 🚇 `sjj_subway_station` — 지하철 역-호선 마스터 (서울/경기/인천 등 세분화된 지역 포함, lat/lng 좌표 99.5% 백필 완료)
 - 🤝 `sjj_room_apply` — 살짝 신청 (매칭 신청/수락/거절)
 - 💬 `sjj_chat_room` / `sjj_chat_message` — 매칭 수락 후 채팅
 - 🖼️ `sjj_room_photo` — 공고 사진 URL (Supabase Storage `room-photos` 버킷)
