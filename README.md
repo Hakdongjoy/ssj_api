@@ -48,6 +48,7 @@ ssj/
 | POST | `/api/room/register` | 🔒 | 공고 등록 |
 | GET | `/api/room/region_cnt` | - | 광역/시군구별 공고 개수 (지역선택용) |
 | GET | `/api/room/station-search` | - | 역 검색 자동완성 |
+| GET | `/api/room/address-search` | - | 도로명주소 자동완성 (카카오 로컬 API) |
 | GET | `/api/room/list` | - | 공고 목록 (무한스크롤, 최초 7개) |
 | GET | `/api/room/count` | - | 필터 적용 시 결과 개수만 조회 (필터 모달 미리보기용) |
 | GET | `/api/room/:id` | - | 공고 상세 |
@@ -63,6 +64,14 @@ ssj/
 🔒 표시된 API는 `Authorization: Bearer <access_token>` 헤더가 필요해요.
 
 자세한 요청/응답 형식은 📄 [API 명세서](https://claude.ai/code/artifact/2b7e974c-7828-4c6e-9029-e856b791dfac)를 참고해주세요.
+
+## 🔑 환경변수
+
+| 변수 | 용도 |
+|---|---|
+| `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` | Supabase 연결 |
+| `PORT` | 서버 포트 |
+| `KAKAO_REST_API_KEY` | 도로명주소 자동완성(`/room/address-search`)용 카카오 로컬 API 키 |
 
 ## 🗄️ DB 구조
 
