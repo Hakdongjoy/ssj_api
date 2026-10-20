@@ -314,6 +314,64 @@ router.get('/station-search', async (req, res) => {
 });
 
 // GET /api/room/address-search?q=테헤란로 123&limit=10 — 도로명주소 자동완성 (카카오 로컬 API 프록시)
+// 두 좌표 사이 직선거리 (미터, 하버사인 공식)
+function haversineMeters(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// 좌표를 가진 전체 역을 (지역+정규화명) 단위로 묶어서 반환 — 여러 호선 행을 역 하나로 합치는 용도
+async function loadStationGroups() {
+  const { data: stations, error } = await supabaseAdmin
+    .from('sjj_subway_station')
+    .select('region_cd, line_nm, station_nm, lat, lng')
+    .not('lat', 'is', null);
+
+  if (error) {
+    console.error('[station groups] 조회 실패:', error.message);
+    return null;
+  }
+
+  const groups = {};
+  for (const s of stations) {
+    const key = `${s.region_cd}|${normalizeStationName(s.station_nm)}`;
+    if (!groups[key]) {
+      groups[key] = {
+        region: s.region_cd,
+        name: s.station_nm.endsWith('역') ? s.station_nm : `${s.station_nm}역`,
+        lat: s.lat, lng: s.lng,
+        slugs: new Set(),
+      };
+    }
+    groups[key].slugs.add(toSlug(s.line_nm.replace(/\s+/g, ' ').trim(), s.region_cd));
+  }
+  return groups;
+}
+
+// groups(loadStationGroups 결과) 중에서 좌표 기준 가장 가까운 역을 찾아 응답용 형태로 반환
+function pickNearestStation(groups, lat, lng) {
+  let nearest = null;
+  for (const key in groups) {
+    const g = groups[key];
+    const dist = haversineMeters(lat, lng, g.lat, g.lng);
+    if (!nearest || dist < nearest.distance_m) nearest = { ...g, distance_m: dist };
+  }
+  if (!nearest) return null;
+
+  return {
+    subway_stn: nearest.name,
+    region: nearest.region,
+    subway_line: sortLineSlugs(nearest.slugs),
+    distance_m: Math.round(nearest.distance_m),
+    walk_min: Math.max(1, Math.round(nearest.distance_m / 67)), // 분당 67m 평균 도보속도 가정 (직선거리 기준 추정치, 실제 경로와 다를 수 있음)
+  };
+}
+
+// GET /api/room/address-search?q=테헤란로 123&limit=10 — 도로명주소 자동완성 + 결과마다 가까운 역/도보시간 자동계산
 router.get('/address-search', async (req, res) => {
   const { q, limit = 10 } = req.query;
   if (!q) return res.json({ addresses: [] });
@@ -332,15 +390,22 @@ router.get('/address-search', async (req, res) => {
       return res.status(500).json({ code: 'ADDRESS_SEARCH_FAILED', error: '주소 검색에 실패했습니다. 잠시 후 다시 시도해주세요' });
     }
 
-    const addresses = (data.documents || []).map(d => ({
-      road_address: d.road_address?.address_name ?? null,
-      jibun_address: d.address?.address_name ?? null,
-      region_1depth: d.address?.region_1depth_name ?? null,
-      region_2depth: d.address?.region_2depth_name ?? null,
-      region_3depth: d.address?.region_3depth_name ?? null,
-      lat: Number(d.y),
-      lng: Number(d.x),
-    }));
+    // 역 목록은 주소 후보 개수와 무관하게 한 번만 불러와서 재사용
+    const stationGroups = await loadStationGroups();
+
+    const addresses = (data.documents || []).map(d => {
+      const lat = Number(d.y);
+      const lng = Number(d.x);
+      return {
+        road_address: d.road_address?.address_name ?? null,
+        jibun_address: d.address?.address_name ?? null,
+        region_1depth: d.address?.region_1depth_name ?? null,
+        region_2depth: d.address?.region_2depth_name ?? null,
+        region_3depth: d.address?.region_3depth_name ?? null,
+        lat, lng,
+        nearest_station: stationGroups ? pickNearestStation(stationGroups, lat, lng) : null,
+      };
+    });
 
     res.json({ addresses });
   } catch (err) {
@@ -349,17 +414,8 @@ router.get('/address-search', async (req, res) => {
   }
 });
 
-// 두 좌표 사이 직선거리 (미터, 하버사인 공식)
-function haversineMeters(lat1, lng1, lat2, lng2) {
-  const R = 6371000;
-  const toRad = (d) => (d * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-// GET /api/room/nearest-station?lat=37.50&lng=127.03 — 좌표 기준 가장 가까운 지하철역 + 도보시간(추정) 반환
+// GET /api/room/nearest-station?lat=37.50&lng=127.03 — 좌표 기준 가장 가까운 지하철역 + 도보시간(추정) 반환.
+// address-search가 이미 nearest_station을 같이 내려주지만, 지도에서 핀을 직접 찍는 등 좌표를 따로 얻은 경우를 위해 별도로도 유지.
 router.get('/nearest-station', async (req, res) => {
   const { lat, lng } = req.query;
   const latNum = Number(lat), lngNum = Number(lng);
@@ -367,47 +423,15 @@ router.get('/nearest-station', async (req, res) => {
     return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: '필요한 정보를 모두 입력했는지 다시 확인해주세요', fields: ['lat', 'lng'] });
   }
 
-  const { data: stations, error } = await supabaseAdmin
-    .from('sjj_subway_station')
-    .select('region_cd, line_nm, station_nm, lat, lng')
-    .not('lat', 'is', null);
-
-  if (error) {
-    console.error('[room/nearest-station] 조회 실패:', error.message);
+  const stationGroups = await loadStationGroups();
+  if (!stationGroups) {
     return res.status(500).json({ code: 'NEAREST_STATION_FAILED', error: '가까운 역 조회에 실패했습니다. 잠시 후 다시 시도해주세요' });
   }
 
-  // 같은 역(지역+정규화명)의 여러 호선 행을 하나로 묶어서 거리 계산
-  const groups = {};
-  for (const s of stations) {
-    const key = `${s.region_cd}|${normalizeStationName(s.station_nm)}`;
-    if (!groups[key]) {
-      groups[key] = {
-        region: s.region_cd,
-        name: s.station_nm.endsWith('역') ? s.station_nm : `${s.station_nm}역`,
-        lat: s.lat, lng: s.lng,
-        slugs: new Set(),
-      };
-    }
-    groups[key].slugs.add(toSlug(s.line_nm.replace(/\s+/g, ' ').trim(), s.region_cd));
-  }
-
-  let nearest = null;
-  for (const key in groups) {
-    const g = groups[key];
-    const dist = haversineMeters(latNum, lngNum, g.lat, g.lng);
-    if (!nearest || dist < nearest.distance_m) nearest = { ...g, distance_m: dist };
-  }
-
+  const nearest = pickNearestStation(stationGroups, latNum, lngNum);
   if (!nearest) return res.status(404).json({ code: 'NO_STATION_FOUND', error: '주변 지하철역을 찾을 수 없습니다' });
 
-  res.json({
-    subway_stn: nearest.name,
-    region: nearest.region,
-    subway_line: sortLineSlugs(nearest.slugs),
-    distance_m: Math.round(nearest.distance_m),
-    walk_min: Math.max(1, Math.round(nearest.distance_m / 67)), // 분당 67m 평균 도보속도 가정 (직선거리 기준 추정치, 실제 경로와 다를 수 있음)
-  });
+  res.json(nearest);
 });
 
 // 조건필터(생활조건/동거인조건/비용) — 리뉴얼 이후 전부 sjj_room 컬럼이라 조인 없이 바로 필터링. list/count가 공유.
