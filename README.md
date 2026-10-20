@@ -48,8 +48,7 @@ ssj/
 | POST | `/api/room/register` | 🔒 | 공고 등록 |
 | GET | `/api/room/region_cnt` | - | 광역/시군구별 공고 개수 (지역선택용) |
 | GET | `/api/room/station-search` | - | 역 검색 자동완성 |
-| GET | `/api/room/address-search` | - | 도로명주소 자동완성 (카카오 로컬 API) |
-| GET | `/api/room/nearest-station` | - | 좌표 기준 가까운 역 + 도보시간 자동계산 |
+| GET | `/api/room/address-search` | - | 주소 입력 시 가까운 지하철역 + 도보시간 자동계산 (카카오 로컬 API) |
 | GET | `/api/room/list` | - | 공고 목록 (무한스크롤, 최초 7개) |
 | GET | `/api/room/count` | - | 필터 적용 시 결과 개수만 조회 (필터 모달 미리보기용) |
 | GET | `/api/room/:id` | - | 공고 상세 |
@@ -72,7 +71,7 @@ ssj/
 |---|---|
 | `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` | Supabase 연결 |
 | `PORT` | 서버 포트 |
-| `KAKAO_REST_API_KEY` | 도로명주소 자동완성(`/room/address-search`)용 카카오 로컬 API 키 |
+| `KAKAO_REST_API_KEY` | 가까운역·도보시간 자동계산(`/room/address-search`)용 카카오 로컬 API 키 |
 
 ## 🗄️ DB 구조
 
