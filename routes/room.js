@@ -880,4 +880,132 @@ router.get('/:id', optionalAuth, async (req, res) => {
   });
 });
 
+// register에서 수정 가능한 필드 화이트리스트 (user_id/is_active/동의 필드 등은 수정 대상 아님)
+const EDITABLE_ROOM_FIELDS = [
+  'region', 'district', 'dong', 'road_address', 'detail_address', 'walk_min',
+  'title', 'bio',
+  'house_type', 'house_type_input', 'shared_spaces',
+  'rent', 'maint_fee', 'utility_separate', 'share_percent',
+  'recruit_count', 'move_in_type',
+  'private_room_count', 'furniture_included',
+  'smoking_policy', 'drink_freq', 'pet_policy', 'activity_time', 'clean_importance', 'noise_lifestyle',
+  'pref_gender', 'restrict_gender', 'pref_age_range', 'pref_job', 'pref_tags',
+  'photo_public',
+];
+
+// PATCH /api/room/:id — 공고 수정 (호스트 본인만, 매칭 완료 후엔 수정 불가)
+router.patch('/:id', verifyToken, async (req, res) => {
+  const user_id = req.user.id;
+  const { id: room_id } = req.params;
+
+  const { data: room, error: roomError } = await supabaseAdmin
+    .from('sjj_room')
+    .select('id, user_id, region, is_active')
+    .eq('id', room_id)
+    .single();
+
+  if (roomError || !room) return res.status(404).json({ code: 'ROOM_NOT_FOUND', error: '공고를 찾을 수 없습니다' });
+  if (room.user_id !== user_id) return res.status(403).json({ code: 'FORBIDDEN', error: '본인 공고만 수정할 수 있습니다' });
+  if (!room.is_active) return res.status(400).json({ code: 'ROOM_EDIT_LOCKED', error: '이미 매칭이 완료된 공고는 수정할 수 없습니다' });
+
+  const update = {};
+  for (const field of EDITABLE_ROOM_FIELDS) {
+    if (req.body[field] !== undefined) update[field] = req.body[field];
+  }
+
+  if (req.body.subway_stn !== undefined) {
+    const region = update.region ?? room.region;
+    const { line: subway_line, canonicalName: canonicalSubwayStn } = await resolveSubwayLine(region, req.body.subway_stn);
+    update.subway_stn = canonicalSubwayStn;
+    update.subway_line = subway_line;
+  }
+
+  if (Object.keys(update).length === 0) {
+    return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: '수정할 내용이 없습니다' });
+  }
+
+  const { error: updateError } = await supabaseAdmin.from('sjj_room').update(update).eq('id', room_id);
+  if (updateError) {
+    console.error('[room/patch] 실패:', updateError.message);
+    return res.status(500).json({ code: 'ROOM_UPDATE_FAILED', error: '공고 수정에 실패했습니다. 잠시 후 다시 시도해주세요' });
+  }
+
+  res.json({ success: true });
+});
+
+// POST /api/room/:id/photos — 사진 추가 (기존 사진 뒤에 이어붙임, 호스트 본인만)
+router.post('/:id/photos', verifyToken, async (req, res) => {
+  const user_id = req.user.id;
+  const { id: room_id } = req.params;
+  const { photo_urls } = req.body;
+
+  if (!Array.isArray(photo_urls) || photo_urls.length === 0) {
+    return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: '추가할 사진이 없습니다' });
+  }
+
+  const { data: room, error: roomError } = await supabaseAdmin
+    .from('sjj_room')
+    .select('id, user_id')
+    .eq('id', room_id)
+    .single();
+
+  if (roomError || !room) return res.status(404).json({ code: 'ROOM_NOT_FOUND', error: '공고를 찾을 수 없습니다' });
+  if (room.user_id !== user_id) return res.status(403).json({ code: 'FORBIDDEN', error: '본인 공고만 수정할 수 있습니다' });
+
+  const photoPrefix = `${process.env.SUPABASE_URL}/storage/v1/object/public/room-photos/`;
+  const validUrls = photo_urls.filter(u => typeof u === 'string' && u.startsWith(photoPrefix));
+  if (validUrls.length === 0) {
+    return res.status(400).json({ code: 'INVALID_PHOTO_URL', error: '올바른 사진 URL이 아닙니다' });
+  }
+
+  const { count: currentCount } = await supabaseAdmin
+    .from('sjj_room_photo')
+    .select('id', { count: 'exact', head: true })
+    .eq('room_id', room_id);
+
+  const { data: inserted, error: photoError } = await supabaseAdmin
+    .from('sjj_room_photo')
+    .insert(validUrls.map((url, i) => ({ room_id, url, sort_order: (currentCount || 0) + i })))
+    .select('id, url, sort_order');
+
+  if (photoError) {
+    console.error('[room/photos] 추가 실패:', photoError.message);
+    return res.status(500).json({ code: 'PHOTO_ADD_FAILED', error: '사진 추가에 실패했습니다. 잠시 후 다시 시도해주세요' });
+  }
+
+  res.json({ success: true, photos: inserted });
+});
+
+// DELETE /api/room/:id/photos/:photoId — 사진 1장 삭제 (호스트 본인만)
+router.delete('/:id/photos/:photoId', verifyToken, async (req, res) => {
+  const user_id = req.user.id;
+  const { id: room_id, photoId } = req.params;
+
+  const { data: room, error: roomError } = await supabaseAdmin
+    .from('sjj_room')
+    .select('id, user_id')
+    .eq('id', room_id)
+    .single();
+
+  if (roomError || !room) return res.status(404).json({ code: 'ROOM_NOT_FOUND', error: '공고를 찾을 수 없습니다' });
+  if (room.user_id !== user_id) return res.status(403).json({ code: 'FORBIDDEN', error: '본인 공고만 수정할 수 있습니다' });
+
+  const { data: photo, error: photoFetchError } = await supabaseAdmin
+    .from('sjj_room_photo')
+    .select('id')
+    .eq('id', photoId)
+    .eq('room_id', room_id)
+    .maybeSingle();
+
+  if (photoFetchError || !photo) return res.status(404).json({ code: 'PHOTO_NOT_FOUND', error: '사진을 찾을 수 없습니다' });
+
+  const { error: deleteError } = await supabaseAdmin.from('sjj_room_photo').delete().eq('id', photoId);
+  if (deleteError) {
+    console.error('[room/photos] 삭제 실패:', deleteError.message);
+    return res.status(500).json({ code: 'PHOTO_DELETE_FAILED', error: '사진 삭제에 실패했습니다. 잠시 후 다시 시도해주세요' });
+  }
+
+  res.json({ success: true });
+});
+
 module.exports = router;
