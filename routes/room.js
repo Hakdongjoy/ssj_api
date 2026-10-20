@@ -313,7 +313,6 @@ router.get('/station-search', async (req, res) => {
   res.json({ stations });
 });
 
-// GET /api/room/address-search?q=테헤란로 123&limit=10 — 도로명주소 자동완성 (카카오 로컬 API 프록시)
 // 두 좌표 사이 직선거리 (미터, 하버사인 공식)
 function haversineMeters(lat1, lng1, lat2, lng2) {
   const R = 6371000;
@@ -371,7 +370,7 @@ function pickNearestStation(groups, lat, lng) {
   };
 }
 
-// GET /api/room/address-search?q=테헤란로 123&limit=10 — 도로명주소 자동완성 + 결과마다 가까운 역/도보시간 자동계산
+// GET /api/room/address-search?q=테헤란로 123&limit=10 — 주소를 입력받아 가까운 지하철역 + 도보시간을 자동계산 (주소 자동완성은 그 과정에서 거치는 수단)
 router.get('/address-search', async (req, res) => {
   const { q, limit = 10 } = req.query;
   if (!q) return res.json({ addresses: [] });
@@ -412,26 +411,6 @@ router.get('/address-search', async (req, res) => {
     console.error('[room/address-search] 실패:', err.message);
     res.status(500).json({ code: 'ADDRESS_SEARCH_FAILED', error: '주소 검색에 실패했습니다. 잠시 후 다시 시도해주세요' });
   }
-});
-
-// GET /api/room/nearest-station?lat=37.50&lng=127.03 — 좌표 기준 가장 가까운 지하철역 + 도보시간(추정) 반환.
-// address-search가 이미 nearest_station을 같이 내려주지만, 지도에서 핀을 직접 찍는 등 좌표를 따로 얻은 경우를 위해 별도로도 유지.
-router.get('/nearest-station', async (req, res) => {
-  const { lat, lng } = req.query;
-  const latNum = Number(lat), lngNum = Number(lng);
-  if (!lat || !lng || Number.isNaN(latNum) || Number.isNaN(lngNum)) {
-    return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: '필요한 정보를 모두 입력했는지 다시 확인해주세요', fields: ['lat', 'lng'] });
-  }
-
-  const stationGroups = await loadStationGroups();
-  if (!stationGroups) {
-    return res.status(500).json({ code: 'NEAREST_STATION_FAILED', error: '가까운 역 조회에 실패했습니다. 잠시 후 다시 시도해주세요' });
-  }
-
-  const nearest = pickNearestStation(stationGroups, latNum, lngNum);
-  if (!nearest) return res.status(404).json({ code: 'NO_STATION_FOUND', error: '주변 지하철역을 찾을 수 없습니다' });
-
-  res.json(nearest);
 });
 
 // 조건필터(생활조건/동거인조건/비용) — 리뉴얼 이후 전부 sjj_room 컬럼이라 조인 없이 바로 필터링. list/count가 공유.
