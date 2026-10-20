@@ -313,6 +313,42 @@ router.get('/station-search', async (req, res) => {
   res.json({ stations });
 });
 
+// GET /api/room/address-search?q=테헤란로 123&limit=10 — 도로명주소 자동완성 (카카오 로컬 API 프록시)
+router.get('/address-search', async (req, res) => {
+  const { q, limit = 10 } = req.query;
+  if (!q) return res.json({ addresses: [] });
+
+  const safeLimit = Math.min(Number(limit) || 10, 30);
+
+  try {
+    const kakaoRes = await fetch(
+      `https://dapi.kakao.com/v2/local/search/address.json?query=${encodeURIComponent(q)}&size=${safeLimit}`,
+      { headers: { Authorization: `KakaoAK ${process.env.KAKAO_REST_API_KEY}` } }
+    );
+    const data = await kakaoRes.json();
+
+    if (!kakaoRes.ok) {
+      console.error('[room/address-search] 카카오 API 실패:', data);
+      return res.status(500).json({ code: 'ADDRESS_SEARCH_FAILED', error: '주소 검색에 실패했습니다. 잠시 후 다시 시도해주세요' });
+    }
+
+    const addresses = (data.documents || []).map(d => ({
+      road_address: d.road_address?.address_name ?? null,
+      jibun_address: d.address?.address_name ?? null,
+      region_1depth: d.address?.region_1depth_name ?? null,
+      region_2depth: d.address?.region_2depth_name ?? null,
+      region_3depth: d.address?.region_3depth_name ?? null,
+      lat: Number(d.y),
+      lng: Number(d.x),
+    }));
+
+    res.json({ addresses });
+  } catch (err) {
+    console.error('[room/address-search] 실패:', err.message);
+    res.status(500).json({ code: 'ADDRESS_SEARCH_FAILED', error: '주소 검색에 실패했습니다. 잠시 후 다시 시도해주세요' });
+  }
+});
+
 // 조건필터(생활조건/동거인조건/비용) — 리뉴얼 이후 전부 sjj_room 컬럼이라 조인 없이 바로 필터링. list/count가 공유.
 function applyRoomFilters(query, qp) {
   const {
