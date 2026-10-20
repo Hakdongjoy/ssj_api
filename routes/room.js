@@ -349,6 +349,67 @@ router.get('/address-search', async (req, res) => {
   }
 });
 
+// 두 좌표 사이 직선거리 (미터, 하버사인 공식)
+function haversineMeters(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// GET /api/room/nearest-station?lat=37.50&lng=127.03 — 좌표 기준 가장 가까운 지하철역 + 도보시간(추정) 반환
+router.get('/nearest-station', async (req, res) => {
+  const { lat, lng } = req.query;
+  const latNum = Number(lat), lngNum = Number(lng);
+  if (!lat || !lng || Number.isNaN(latNum) || Number.isNaN(lngNum)) {
+    return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: '필요한 정보를 모두 입력했는지 다시 확인해주세요', fields: ['lat', 'lng'] });
+  }
+
+  const { data: stations, error } = await supabaseAdmin
+    .from('sjj_subway_station')
+    .select('region_cd, line_nm, station_nm, lat, lng')
+    .not('lat', 'is', null);
+
+  if (error) {
+    console.error('[room/nearest-station] 조회 실패:', error.message);
+    return res.status(500).json({ code: 'NEAREST_STATION_FAILED', error: '가까운 역 조회에 실패했습니다. 잠시 후 다시 시도해주세요' });
+  }
+
+  // 같은 역(지역+정규화명)의 여러 호선 행을 하나로 묶어서 거리 계산
+  const groups = {};
+  for (const s of stations) {
+    const key = `${s.region_cd}|${normalizeStationName(s.station_nm)}`;
+    if (!groups[key]) {
+      groups[key] = {
+        region: s.region_cd,
+        name: s.station_nm.endsWith('역') ? s.station_nm : `${s.station_nm}역`,
+        lat: s.lat, lng: s.lng,
+        slugs: new Set(),
+      };
+    }
+    groups[key].slugs.add(toSlug(s.line_nm.replace(/\s+/g, ' ').trim(), s.region_cd));
+  }
+
+  let nearest = null;
+  for (const key in groups) {
+    const g = groups[key];
+    const dist = haversineMeters(latNum, lngNum, g.lat, g.lng);
+    if (!nearest || dist < nearest.distance_m) nearest = { ...g, distance_m: dist };
+  }
+
+  if (!nearest) return res.status(404).json({ code: 'NO_STATION_FOUND', error: '주변 지하철역을 찾을 수 없습니다' });
+
+  res.json({
+    subway_stn: nearest.name,
+    region: nearest.region,
+    subway_line: sortLineSlugs(nearest.slugs),
+    distance_m: Math.round(nearest.distance_m),
+    walk_min: Math.max(1, Math.round(nearest.distance_m / 67)), // 분당 67m 평균 도보속도 가정 (직선거리 기준 추정치, 실제 경로와 다를 수 있음)
+  });
+});
+
 // 조건필터(생활조건/동거인조건/비용) — 리뉴얼 이후 전부 sjj_room 컬럼이라 조인 없이 바로 필터링. list/count가 공유.
 function applyRoomFilters(query, qp) {
   const {
