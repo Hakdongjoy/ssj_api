@@ -499,6 +499,18 @@ router.get('/applications/sent', verifyToken, async (req, res) => {
   res.json({ applications });
 });
 
+// 채팅 첫 진입 시 호스트 명의로 자동 삽입되는 고정 인사말
+const CHAT_GREETING_TEMPLATE = '안녕하세요. 관심 주셔서 감사해요. 아직 함께 살 분을 찾고 있어요. 편하게 물어봐주세요 :)';
+
+// 신청/수락/거절 시 채팅방에 남기는 말풍선 없는 시스템 로그 메시지
+async function insertSystemMessage(chat_room_id, sender_id, content) {
+  if (!chat_room_id) return;
+  const { error } = await supabaseAdmin
+    .from('sjj_chat_message')
+    .insert({ chat_room_id, sender_id, content, type: 'system' });
+  if (error) console.error('[system message] 삽입 실패:', error.message);
+}
+
 // PATCH /api/room/applications/:applyId — 수락/거절 (집주인만)
 router.patch('/applications/:applyId', verifyToken, async (req, res) => {
   const user_id = req.user.id;
@@ -526,29 +538,48 @@ router.patch('/applications/:applyId', verifyToken, async (req, res) => {
 
   if (updateError) return res.status(500).json({ code: 'APPLY_UPDATE_FAILED', error: '처리에 실패했습니다. 잠시 후 다시 시도해주세요' });
 
-  if (status === 'rejected') {
-    return res.json({ success: true, status: 'rejected' });
-  }
-
-  // 수락: 공고 비활성화 + 다른 대기중 신청 자동 거절 (채팅방은 이미 존재 — apply/inquire 시점에 생성·연결돼있음)
-  await supabaseAdmin.from('sjj_room').update({ is_active: false }).eq('id', apply.room_id);
-  await supabaseAdmin
-    .from('sjj_room_apply')
-    .update({ status: 'rejected', responded_at: new Date().toISOString() })
-    .eq('room_id', apply.room_id)
-    .eq('status', 'pending');
-
-  const { data: chatRoom } = await supabaseAdmin
+  const { data: thisChatRoom } = await supabaseAdmin
     .from('sjj_chat_room')
     .select('id')
     .eq('apply_id', apply.id)
     .maybeSingle();
 
-  res.json({ success: true, status: 'accepted', chat_room_id: chatRoom?.id ?? null });
-});
+  if (status === 'rejected') {
+    await insertSystemMessage(thisChatRoom?.id, user_id, '아쉽지만 이번엔 함께하지 못하게 됐어요.');
+    return res.json({ success: true, status: 'rejected' });
+  }
 
-// 채팅 첫 진입 시 호스트 명의로 자동 삽입되는 고정 인사말
-const CHAT_GREETING_TEMPLATE = '안녕하세요. 관심 주셔서 감사해요. 아직 함께 살 분을 찾고 있어요. 편하게 물어봐주세요 :)';
+  // 수락: 공고 비활성화 + 다른 대기중 신청 자동 거절 (채팅방은 이미 존재 — apply/inquire 시점에 생성·연결돼있음)
+  await supabaseAdmin.from('sjj_room').update({ is_active: false }).eq('id', apply.room_id);
+
+  // 자동 거절되는 다른 신청들 — update 전에 먼저 조회해서 각자의 채팅방에 거절 메시지를 남김
+  const { data: otherPendingApplies } = await supabaseAdmin
+    .from('sjj_room_apply')
+    .select('id')
+    .eq('room_id', apply.room_id)
+    .eq('status', 'pending');
+
+  if (otherPendingApplies && otherPendingApplies.length > 0) {
+    const otherApplyIds = otherPendingApplies.map(a => a.id);
+    const { data: otherChatRooms } = await supabaseAdmin
+      .from('sjj_chat_room')
+      .select('id, apply_id')
+      .in('apply_id', otherApplyIds);
+
+    await Promise.all(
+      (otherChatRooms || []).map(cr => insertSystemMessage(cr.id, user_id, '아쉽지만 이번엔 함께하지 못하게 됐어요.'))
+    );
+
+    await supabaseAdmin
+      .from('sjj_room_apply')
+      .update({ status: 'rejected', responded_at: new Date().toISOString() })
+      .in('id', otherApplyIds);
+  }
+
+  await insertSystemMessage(thisChatRoom?.id, user_id, '함께 살기로 매칭됐어요! 이제 상세 주소를 확인할 수 있어요.');
+
+  res.json({ success: true, status: 'accepted', chat_room_id: thisChatRoom?.id ?? null });
+});
 
 // POST /api/room/:id/inquire — "문의하기". 신청 전에 먼저 채팅방을 열어줌 (이미 열려있으면 그 채팅방을 그대로 반환)
 router.post('/:id/inquire', verifyToken, async (req, res) => {
@@ -643,6 +674,8 @@ router.post('/:id/apply', verifyToken, async (req, res) => {
     if (chatError) console.error('[room/apply] 채팅방 연결 실패:', chatError.message);
     chat_room_id = newChatRoom?.id ?? null;
   }
+
+  await insertSystemMessage(chat_room_id, user_id, '함께 살기를 요청했어요.');
 
   res.json({ success: true, apply_id: apply.id, status: apply.status, chat_room_id });
 });

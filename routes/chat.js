@@ -53,7 +53,7 @@ router.get('/rooms/:chatRoomId/messages', verifyToken, async (req, res) => {
 
   let query = supabaseAdmin
     .from('sjj_chat_message')
-    .select('id, sender_id, content, created_at')
+    .select('id, sender_id, content, type, created_at')
     .eq('chat_room_id', chatRoomId)
     .order('created_at', { ascending: true });
 
@@ -89,7 +89,7 @@ router.post('/rooms/:chatRoomId/messages', verifyToken, async (req, res) => {
   const { data: message, error } = await supabaseAdmin
     .from('sjj_chat_message')
     .insert({ chat_room_id: chatRoomId, sender_id: user_id, content: content.trim() })
-    .select('id, sender_id, content, created_at')
+    .select('id, sender_id, content, type, created_at')
     .single();
 
   if (error) {
