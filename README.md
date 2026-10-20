@@ -44,13 +44,15 @@ ssj/
 | GET | `/api/user/nick/random` | - | 랜덤 닉네임 생성 |
 | PATCH | `/api/user/nick` | 🔒 | 닉네임 수정 |
 | POST | `/api/user/pref` | 🔒 | 추가정보 등록 (방 없는 사람) |
-| POST | `/api/room/register` | 🔒 | 공고 등록 (방 있는 사람) |
+| DELETE | `/api/user/me` | 🔒 | 회원 탈퇴 (소프트 삭제/익명화) |
+| POST | `/api/room/register` | 🔒 | 공고 등록 |
 | GET | `/api/room/region_cnt` | - | 광역/시군구별 공고 개수 (지역선택용) |
 | GET | `/api/room/station-search` | - | 역 검색 자동완성 |
 | GET | `/api/room/list` | - | 공고 목록 (무한스크롤, 최초 7개) |
 | GET | `/api/room/count` | - | 필터 적용 시 결과 개수만 조회 (필터 모달 미리보기용) |
 | GET | `/api/room/:id` | - | 공고 상세 |
-| POST | `/api/room/:id/apply` | 🔒 | 살짝 신청하기 |
+| POST | `/api/room/:id/inquire` | 🔒 | 문의하기 (채팅방 열기) |
+| POST | `/api/room/:id/apply` | 🔒 | 함께 살기로 요청 (채팅방 안에서 호출) |
 | GET | `/api/room/applications/received` | 🔒 | 내가 받은 신청 목록 |
 | GET | `/api/room/applications/sent` | 🔒 | 내가 보낸 신청 목록 |
 | PATCH | `/api/room/applications/:applyId` | 🔒 | 신청 수락/거절 |
@@ -64,7 +66,7 @@ ssj/
 
 ## 🗄️ DB 구조
 
-- 👤 `sjj_user` — 유저 기본 정보
+- 👤 `sjj_user` — 유저 기본 정보 (deleted_at으로 탈퇴 여부 표시, 탈퇴해도 행은 익명화해서 유지)
 - 📋 `sjj_user_info` — 유저 추가정보 (생활습관)
 - 🏘️ `sjj_room` — 공고 (방 있는 사람)
 - 🔍 `sjj_room_pref` — 희망조건 (방 없는 사람)
