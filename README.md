@@ -47,7 +47,7 @@ ssj/
 | DELETE | `/api/user/me` | 🔒 | 회원 탈퇴 (소프트 삭제/익명화) |
 | POST | `/api/room/register` | 🔒 | 공고 등록 |
 | PATCH | `/api/room/:id` | 🔒 | 공고 수정 (매칭 완료 전까지만) |
-| POST | `/api/room/:id/photos` | 🔒 | 공고 사진 추가 |
+| POST | `/api/room/:id/photos` | 🔒 | 공고 사진 추가 (카테고리: 거실/방/주방/화장실/현관/기타) |
 | DELETE | `/api/room/:id/photos/:photoId` | 🔒 | 공고 사진 삭제 |
 | GET | `/api/room/region_cnt` | - | 광역/시군구별 공고 개수 (지역선택용) |
 | GET | `/api/room/station-search` | - | 역 검색 자동완성 |
