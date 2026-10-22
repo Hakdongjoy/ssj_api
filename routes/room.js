@@ -4,6 +4,18 @@ const { supabaseAdmin } = require('../supabase');
 const verifyToken = require('../middleware/auth');
 const { optionalAuth } = require('../middleware/auth');
 
+const PHOTO_CATEGORIES = ['거실', '방', '주방', '화장실', '현관', '기타'];
+
+// photos: [{ url, category? }] 중 room-photos 버킷 URL이면서 category가 화이트리스트 안에 있는(또는 비어있는) 것만 통과
+function sanitizePhotos(photos) {
+  if (!Array.isArray(photos)) return [];
+  const photoPrefix = `${process.env.SUPABASE_URL}/storage/v1/object/public/room-photos/`;
+  return photos
+    .filter(p => p && typeof p.url === 'string' && p.url.startsWith(photoPrefix))
+    .filter(p => p.category === undefined || p.category === null || PHOTO_CATEGORIES.includes(p.category))
+    .map(p => ({ url: p.url, category: p.category ?? null }));
+}
+
 function calcAge(birth) {
   if (!birth) return null;
   return new Date().getFullYear() - new Date(birth).getFullYear() + 1;
@@ -163,7 +175,7 @@ router.post('/register', verifyToken, async (req, res) => {
     // 동의
     profile_agree, location_agree, push_agree, marketing_agree,
     // 사진
-    photo_public, photo_urls,
+    photo_public, photos: photosInput,
   } = req.body;
   console.log('[room/register] 요청 user_id:', user_id);
 
@@ -198,15 +210,12 @@ router.post('/register', verifyToken, async (req, res) => {
     return res.status(500).json({ code: 'ROOM_REGISTER_FAILED', error: '공고 등록에 실패했습니다. 잠시 후 다시 시도해주세요' });
   }
 
-  if (Array.isArray(photo_urls) && photo_urls.length > 0) {
-    const photoPrefix = `${process.env.SUPABASE_URL}/storage/v1/object/public/room-photos/`;
-    const validUrls = photo_urls.filter(u => typeof u === 'string' && u.startsWith(photoPrefix));
-    if (validUrls.length > 0) {
-      const { error: photoError } = await supabaseAdmin
-        .from('sjj_room_photo')
-        .insert(validUrls.map((url, i) => ({ room_id: roomData.id, url, sort_order: i })));
-      if (photoError) console.error('[room/register] 사진 저장 실패:', photoError.message);
-    }
+  const validPhotos = sanitizePhotos(photosInput);
+  if (validPhotos.length > 0) {
+    const { error: photoError } = await supabaseAdmin
+      .from('sjj_room_photo')
+      .insert(validPhotos.map((p, i) => ({ room_id: roomData.id, url: p.url, category: p.category, sort_order: i })));
+    if (photoError) console.error('[room/register] 사진 저장 실패:', photoError.message);
   }
 
   console.log('[room/register] 완료');
@@ -815,10 +824,10 @@ router.get('/:id', optionalAuth, async (req, res) => {
   if (data.photo_public !== false) {
     const { data: photoRows } = await supabaseAdmin
       .from('sjj_room_photo')
-      .select('url')
+      .select('url, category')
       .eq('room_id', data.id)
       .order('sort_order', { ascending: true });
-    photos = (photoRows || []).map(p => p.url);
+    photos = (photoRows || []).map(p => ({ url: p.url, category: p.category }));
   }
 
   // 도로명주소/상세주소는 매칭 전까지 비공개 — 본인(호스트) 또는 수락된 신청자(sjj_chat_room)만 조회 가능
@@ -937,9 +946,9 @@ router.patch('/:id', verifyToken, async (req, res) => {
 router.post('/:id/photos', verifyToken, async (req, res) => {
   const user_id = req.user.id;
   const { id: room_id } = req.params;
-  const { photo_urls } = req.body;
+  const { photos: photosInput } = req.body;
 
-  if (!Array.isArray(photo_urls) || photo_urls.length === 0) {
+  if (!Array.isArray(photosInput) || photosInput.length === 0) {
     return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: '추가할 사진이 없습니다' });
   }
 
@@ -952,9 +961,8 @@ router.post('/:id/photos', verifyToken, async (req, res) => {
   if (roomError || !room) return res.status(404).json({ code: 'ROOM_NOT_FOUND', error: '공고를 찾을 수 없습니다' });
   if (room.user_id !== user_id) return res.status(403).json({ code: 'FORBIDDEN', error: '본인 공고만 수정할 수 있습니다' });
 
-  const photoPrefix = `${process.env.SUPABASE_URL}/storage/v1/object/public/room-photos/`;
-  const validUrls = photo_urls.filter(u => typeof u === 'string' && u.startsWith(photoPrefix));
-  if (validUrls.length === 0) {
+  const validPhotos = sanitizePhotos(photosInput);
+  if (validPhotos.length === 0) {
     return res.status(400).json({ code: 'INVALID_PHOTO_URL', error: '올바른 사진 URL이 아닙니다' });
   }
 
@@ -965,8 +973,8 @@ router.post('/:id/photos', verifyToken, async (req, res) => {
 
   const { data: inserted, error: photoError } = await supabaseAdmin
     .from('sjj_room_photo')
-    .insert(validUrls.map((url, i) => ({ room_id, url, sort_order: (currentCount || 0) + i })))
-    .select('id, url, sort_order');
+    .insert(validPhotos.map((p, i) => ({ room_id, url: p.url, category: p.category, sort_order: (currentCount || 0) + i })))
+    .select('id, url, category, sort_order');
 
   if (photoError) {
     console.error('[room/photos] 추가 실패:', photoError.message);
