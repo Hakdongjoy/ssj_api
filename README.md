@@ -40,6 +40,7 @@ ssj/
 | POST | `/api/auth/phone/confirm` | - | 휴대폰 인증번호 확인 |
 | POST | `/api/auth/signup` | - | 회원가입 |
 | POST | `/api/auth/login` | - | 로그인 |
+| POST | `/api/auth/refresh` | - | access_token 재발급 (refresh_token 사용) |
 | POST | `/api/auth/social/complete` | 🔒 | SNS(카카오) 로그인 후 프로필 완성 확인 |
 | GET | `/api/user/nick/random` | - | 랜덤 닉네임 생성 |
 | PATCH | `/api/user/nick` | 🔒 | 닉네임 수정 |
