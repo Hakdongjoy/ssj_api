@@ -157,6 +157,8 @@ router.post('/signup', async (req, res) => {
 
   const user_id = data.user.id;
   const access_token = data.session?.access_token;
+  const refresh_token = data.session?.refresh_token;
+  const expires_in = data.session?.expires_in;
   console.log('[signup] Step1 성공 user_id:', user_id);
 
   const { nick, error: profileError } = await assignNick(user_id, { login_id: id, gender, birth, phone });
@@ -168,7 +170,7 @@ router.post('/signup', async (req, res) => {
   }
 
   console.log('[signup] 완료, nick:', nick);
-  res.json({ user_id, access_token, nick });
+  res.json({ user_id, access_token, refresh_token, expires_in, nick });
 });
 
 // POST /api/auth/login
@@ -194,6 +196,28 @@ router.post('/login', async (req, res) => {
   res.json({
     user_id: data.user.id,
     access_token: data.session.access_token,
+    refresh_token: data.session.refresh_token,
+    expires_in: data.session.expires_in,
+  });
+});
+
+// POST /api/auth/refresh — access_token 만료 시 refresh_token으로 재발급
+router.post('/refresh', async (req, res) => {
+  const { refresh_token } = req.body;
+  if (!refresh_token) {
+    return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: MISSING_FIELD_MESSAGE, fields: ['refresh_token'] });
+  }
+
+  const { data, error } = await supabase.auth.refreshSession({ refresh_token });
+  if (error) {
+    console.error('[refresh] 실패:', error.message);
+    return res.status(401).json({ code: 'INVALID_REFRESH_TOKEN', error: '세션이 만료됐습니다. 다시 로그인해주세요' });
+  }
+
+  res.json({
+    access_token: data.session.access_token,
+    refresh_token: data.session.refresh_token,
+    expires_in: data.session.expires_in,
   });
 });
 
