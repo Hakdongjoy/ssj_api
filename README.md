@@ -64,8 +64,14 @@ ssj/
 | GET | `/api/chat/rooms` | 🔒 | 내 채팅방 목록 |
 | GET | `/api/chat/rooms/:chatRoomId/messages` | 🔒 | 메시지 조회 (폴링) |
 | POST | `/api/chat/rooms/:chatRoomId/messages` | 🔒 | 메시지 전송 |
+| GET | `/api/admin/users` | 🔒👑 | 유저 검색/목록 |
+| PATCH | `/api/admin/users/:id/ban` | 🔒👑 | 유저 정지 |
+| PATCH | `/api/admin/users/:id/unban` | 🔒👑 | 유저 정지 해제 |
+| GET | `/api/admin/rooms` | 🔒👑 | 공고 전체 조회 (비활성 포함) |
+| PATCH | `/api/admin/rooms/:id/deactivate` | 🔒👑 | 공고 강제 비활성화 |
+| GET | `/api/admin/stats` | 🔒👑 | 전체 현황 요약 |
 
-🔒 표시된 API는 `Authorization: Bearer <access_token>` 헤더가 필요해요.
+🔒 표시된 API는 `Authorization: Bearer <access_token>` 헤더가 필요해요. 👑는 `sjj_user.is_admin=true`인 관리자 계정만 가능해요.
 
 자세한 요청/응답 형식은 📄 [API 명세서](https://claude.ai/code/artifact/2b7e974c-7828-4c6e-9029-e856b791dfac)를 참고해주세요.
 
