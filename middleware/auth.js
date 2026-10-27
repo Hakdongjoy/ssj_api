@@ -1,4 +1,4 @@
-const { supabase } = require('../supabase');
+const { supabase, supabaseAdmin } = require('../supabase');
 
 async function verifyToken(req, res, next) {
   const auth = req.headers.authorization;
@@ -31,6 +31,22 @@ async function optionalAuth(req, res, next) {
   next();
 }
 
+// verifyToken 통과 후 req.user.id가 관리자인지 확인
+async function verifyAdmin(req, res, next) {
+  const { data: user, error } = await supabaseAdmin
+    .from('sjj_user')
+    .select('is_admin')
+    .eq('id', req.user.id)
+    .single();
+
+  if (error || !user?.is_admin) {
+    return res.status(403).json({ code: 'FORBIDDEN', error: '관리자만 접근할 수 있습니다' });
+  }
+
+  next();
+}
+
 module.exports = verifyToken;
 module.exports.verifyToken = verifyToken;
 module.exports.optionalAuth = optionalAuth;
+module.exports.verifyAdmin = verifyAdmin;

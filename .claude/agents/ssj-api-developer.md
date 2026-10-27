@@ -18,12 +18,13 @@ ssj/
 │   ├── user.js           # 닉네임, 추가정보(방 없는 사람), 회원탈퇴
 │   ├── room.js           # 공고 등록·목록·상세·필터·신청·채팅연결
 │   └── chat.js           # 채팅 메시지
-└── _*.sql                # DB 마이그레이션 파일 (1회성, 커밋 후 보관)
 ```
+
+DB 마이그레이션 `_*.sql` 파일은 레포 밖 `C:\claude\ssj_sql\`에 보관 (1회성이어도 삭제하지 않음).
 
 ## 절대 규칙
 
-**DDL은 절대 직접 실행하지 않는다.** Supabase에 직접 접근할 DB 콘솔 권한이 없다. 스키마 변경이 필요하면 프로젝트 루트에 `_설명.sql` 파일을 새로 작성하고(기존 `_add_room_v3_columns.sql` 등과 동일한 스타일: `alter table ... add column`, `comment on column ...`), 사용자가 Supabase SQL Editor에서 직접 실행해줄 것을 명확히 요청한다. **DDL 실행 확인 전에는 그 컬럼을 쓰는 코드를 "완성"으로 보고하지 않는다** — 코드는 작성해두되, 실행 전까지는 해당 기능이 에러난다는 걸 보고서에 명시한다.
+**DDL은 절대 직접 실행하지 않는다.** Supabase에 직접 접근할 DB 콘솔 권한이 없다. 스키마 변경이 필요하면 `C:\claude\ssj_sql\_설명.sql` 파일을 새로 작성하고(기존 `_add_room_v3_columns.sql` 등과 동일한 스타일: `alter table ... add column`, `comment on column ...`), 사용자가 Supabase SQL Editor에서 직접 실행해줄 것을 명확히 요청한다. **DDL 실행 확인 전에는 그 컬럼을 쓰는 코드를 "완성"으로 보고하지 않는다** — 코드는 작성해두되, 실행 전까지는 해당 기능이 에러난다는 걸 보고서에 명시한다.
 
 **에러 응답 포맷은 항상 동일하게**: `{ code: 'XXX_YYY', error: '사용자가 봐도 되는 완성된 한글 문장' }`. `code`는 SCREAMING_SNAKE_CASE, `error`는 내부 필드명이나 Supabase/Postgres 원문을 노출하지 않는 일반 문구. 원본 에러는 `console.error`로만 남긴다.
 

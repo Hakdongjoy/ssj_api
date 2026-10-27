@@ -13,15 +13,16 @@ ssj/
 │   ├── user.js           # 닉네임, 추가정보(방 없는 사람), 회원탈퇴
 │   ├── room.js           # 공고 등록·목록·상세·필터·신청·채팅연결
 │   └── chat.js           # 채팅 메시지
-└── _*.sql                # DB 마이그레이션 파일 (1회성, 실행 후에도 보관)
 ```
+
+DB 마이그레이션 `_*.sql` 파일은 `C:\claude\ssj_sql\`에 보관 (레포 밖, 1회성이어도 실행 후 삭제하지 않음).
 
 - 📄 API 명세서(Artifact): https://claude.ai/code/artifact/2b7e974c-7828-4c6e-9029-e856b791dfac
 - 코드/기능 변경 시 README.md + 위 명세서를 같이 갱신 (버전 bump 포함)
 
 ## 절대 규칙
 
-**DDL은 절대 직접 실행할 수 없다.** `SUPABASE_SERVICE_ROLE_KEY`는 PostgREST REST API용 키라 `alter table`/`create table` 같은 DDL을 지원하지 않는다 (`supabase.rpc()`로 임의 SQL 실행도 불가 — 등록된 함수가 없음). 스키마 변경이 필요하면 프로젝트 루트에 `_설명.sql` 파일을 작성(`alter table ... add column`, `comment on column ...` 패턴)하고, **사용자가 Supabase SQL Editor에서 직접 실행할 때까지 그 컬럼을 쓰는 코드를 "완료"로 보고하지 않는다.**
+**DDL은 절대 직접 실행할 수 없다.** `SUPABASE_SERVICE_ROLE_KEY`는 PostgREST REST API용 키라 `alter table`/`create table` 같은 DDL을 지원하지 않는다 (`supabase.rpc()`로 임의 SQL 실행도 불가 — 등록된 함수가 없음). 스키마 변경이 필요하면 `C:\claude\ssj_sql\_설명.sql` 파일을 작성(`alter table ... add column`, `comment on column ...` 패턴)하고, **사용자가 Supabase SQL Editor에서 직접 실행할 때까지 그 컬럼을 쓰는 코드를 "완료"로 보고하지 않는다.**
 
 **`auth.users` → `sjj_user`는 cascade 삭제 관계다.** `supabaseAdmin.auth.admin.deleteUser(user_id)`를 호출하면 `sjj_user` 행이 통째로 같이 사라진다 (회원탈퇴 기능 구현 중 실제로 발견한 버그). 계정 로그인만 막고 행은 보존해야 하는 작업(탈퇴, 정지 등)은 `deleteUser` 대신 `auth.admin.updateUserById(user_id, { ban_duration: '876000h' })`(사실상 영구 정지)를 쓴다.
 
