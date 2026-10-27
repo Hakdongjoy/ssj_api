@@ -46,6 +46,10 @@ ssj/
 | PATCH | `/api/user/nick` | 🔒 | 닉네임 수정 |
 | POST | `/api/user/pref` | 🔒 | 추가정보 등록 (방 없는 사람) |
 | DELETE | `/api/user/me` | 🔒 | 회원 탈퇴 (소프트 삭제/익명화) |
+| POST | `/api/user/block/:userId` | 🔒 | 유저 차단 |
+| DELETE | `/api/user/block/:userId` | 🔒 | 차단 해제 |
+| GET | `/api/user/blocks` | 🔒 | 내 차단 목록 |
+| POST | `/api/report` | 🔒 | 유저 신고 (자동조치 없음, 관리자 검토용) |
 | POST | `/api/room/register` | 🔒 | 공고 등록 |
 | PATCH | `/api/room/:id` | 🔒 | 공고 수정 (매칭 완료 전까지만) |
 | POST | `/api/room/:id/photos` | 🔒 | 공고 사진 추가 (카테고리: 거실/방/주방/화장실/현관/기타) |
@@ -70,6 +74,7 @@ ssj/
 | GET | `/api/admin/rooms` | 🔒👑 | 공고 전체 조회 (비활성 포함) |
 | PATCH | `/api/admin/rooms/:id/deactivate` | 🔒👑 | 공고 강제 비활성화 |
 | GET | `/api/admin/stats` | 🔒👑 | 전체 현황 요약 |
+| GET | `/api/admin/reports` | 🔒👑 | 신고 목록 조회 |
 
 🔒 표시된 API는 `Authorization: Bearer <access_token>` 헤더가 필요해요. 👑는 `sjj_user.is_admin=true`인 관리자 계정만 가능해요.
 
