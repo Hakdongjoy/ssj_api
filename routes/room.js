@@ -3,6 +3,7 @@ const router = express.Router();
 const { supabaseAdmin } = require('../supabase');
 const verifyToken = require('../middleware/auth');
 const { optionalAuth } = require('../middleware/auth');
+const { isBlockedPair, getBlockedUserIds } = require('../utils/block');
 
 const PHOTO_CATEGORIES = ['거실', '방', '주방', '화장실', '현관', '기타'];
 
@@ -461,6 +462,11 @@ router.get('/list', optionalAuth, async (req, res) => {
     .order('created_at', { ascending: false })
     .range(offset, offset + safeLimit - 1);
 
+  if (req.user) {
+    const blockedIds = await getBlockedUserIds(req.user.id);
+    if (blockedIds.length > 0) query = query.not('user_id', 'in', `(${blockedIds.join(',')})`);
+  }
+
   query = applyRoomFilters(query, req.query);
 
   const { data, error, count } = await query;
@@ -710,6 +716,7 @@ router.post('/:id/inquire', verifyToken, async (req, res) => {
   if (roomError || !room) return res.status(404).json({ code: 'ROOM_NOT_FOUND', error: '공고를 찾을 수 없습니다' });
   if (!room.is_active) return res.status(400).json({ code: 'ROOM_NOT_ACTIVE', error: '이미 마감된 공고입니다' });
   if (room.user_id === user_id) return res.status(400).json({ code: 'SELF_INQUIRE_FORBIDDEN', error: '본인 공고에는 문의할 수 없습니다' });
+  if (await isBlockedPair(user_id, room.user_id)) return res.status(403).json({ code: 'BLOCKED', error: '문의할 수 없습니다' });
 
   const { data: existing } = await supabaseAdmin
     .from('sjj_chat_room')
@@ -755,6 +762,7 @@ router.post('/:id/apply', verifyToken, async (req, res) => {
   if (roomError || !room) return res.status(404).json({ code: 'ROOM_NOT_FOUND', error: '공고를 찾을 수 없습니다' });
   if (!room.is_active) return res.status(400).json({ code: 'ROOM_NOT_ACTIVE', error: '이미 마감된 공고입니다' });
   if (room.user_id === user_id) return res.status(400).json({ code: 'SELF_APPLY_FORBIDDEN', error: '본인 공고에는 신청할 수 없습니다' });
+  if (await isBlockedPair(user_id, room.user_id)) return res.status(403).json({ code: 'BLOCKED', error: '신청할 수 없습니다' });
 
   const { data: apply, error } = await supabaseAdmin
     .from('sjj_room_apply')
@@ -806,6 +814,10 @@ router.get('/:id', optionalAuth, async (req, res) => {
     .single();
 
   if (error) return res.status(404).json({ code: 'ROOM_NOT_FOUND', error: '공고를 찾을 수 없습니다' });
+
+  if (req.user && await isBlockedPair(req.user.id, data.user_id)) {
+    return res.status(404).json({ code: 'ROOM_NOT_FOUND', error: '공고를 찾을 수 없습니다' });
+  }
 
   if (data.restrict_gender) {
     let viewerGender = null;

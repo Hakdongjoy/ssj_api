@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { supabaseAdmin } = require('../supabase');
 const verifyToken = require('../middleware/auth');
+const { isBlockedPair } = require('../utils/block');
 
 // GET /api/chat/rooms — 내 채팅방 목록 (집주인/신청자 양쪽 다)
 router.get('/rooms', verifyToken, async (req, res) => {
@@ -84,6 +85,11 @@ router.post('/rooms/:chatRoomId/messages', verifyToken, async (req, res) => {
   if (roomError || !chatRoom) return res.status(404).json({ code: 'CHAT_ROOM_NOT_FOUND', error: '채팅방을 찾을 수 없습니다' });
   if (chatRoom.owner_id !== user_id && chatRoom.applicant_id !== user_id) {
     return res.status(403).json({ code: 'FORBIDDEN', error: '본인이 속한 채팅방만 이용할 수 있습니다' });
+  }
+
+  const partnerId = chatRoom.owner_id === user_id ? chatRoom.applicant_id : chatRoom.owner_id;
+  if (await isBlockedPair(user_id, partnerId)) {
+    return res.status(403).json({ code: 'BLOCKED', error: '메시지를 보낼 수 없습니다' });
   }
 
   const { data: message, error } = await supabaseAdmin

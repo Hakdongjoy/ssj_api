@@ -130,4 +130,65 @@ router.delete('/me', verifyToken, async (req, res) => {
   res.json({ success: true });
 });
 
+// POST /api/user/block/:userId — 유저 차단
+router.post('/block/:userId', verifyToken, async (req, res) => {
+  const blocker_id = req.user.id;
+  const { userId: blocked_id } = req.params;
+
+  if (blocker_id === blocked_id) {
+    return res.status(400).json({ code: 'SELF_BLOCK_FORBIDDEN', error: '본인을 차단할 수 없습니다' });
+  }
+
+  const { error } = await supabaseAdmin
+    .from('sjj_block')
+    .upsert({ blocker_id, blocked_id }, { onConflict: 'blocker_id,blocked_id' });
+
+  if (error) {
+    console.error('[block] 실패:', error.message);
+    return res.status(500).json({ code: 'BLOCK_FAILED', error: '차단에 실패했습니다. 잠시 후 다시 시도해주세요' });
+  }
+
+  res.json({ success: true });
+});
+
+// DELETE /api/user/block/:userId — 차단 해제
+router.delete('/block/:userId', verifyToken, async (req, res) => {
+  const blocker_id = req.user.id;
+  const { userId: blocked_id } = req.params;
+
+  const { error } = await supabaseAdmin
+    .from('sjj_block')
+    .delete()
+    .eq('blocker_id', blocker_id)
+    .eq('blocked_id', blocked_id);
+
+  if (error) {
+    console.error('[unblock] 실패:', error.message);
+    return res.status(500).json({ code: 'UNBLOCK_FAILED', error: '차단 해제에 실패했습니다. 잠시 후 다시 시도해주세요' });
+  }
+
+  res.json({ success: true });
+});
+
+// GET /api/user/blocks — 내가 차단한 유저 목록
+router.get('/blocks', verifyToken, async (req, res) => {
+  const blocker_id = req.user.id;
+
+  const { data, error } = await supabaseAdmin
+    .from('sjj_block')
+    .select('blocked_id, created_at')
+    .eq('blocker_id', blocker_id)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('[blocks] 조회 실패:', error.message);
+    return res.status(500).json({ code: 'BLOCK_LIST_FAILED', error: '차단 목록 조회에 실패했습니다. 잠시 후 다시 시도해주세요' });
+  }
+
+  const { data: users } = await supabaseAdmin.from('sjj_user').select('id, nick').in('id', data.map(b => b.blocked_id));
+  const nickMap = Object.fromEntries((users || []).map(u => [u.id, u.nick]));
+
+  res.json({ blocks: data.map(b => ({ user_id: b.blocked_id, nick: nickMap[b.blocked_id], created_at: b.created_at })) });
+});
+
 module.exports = router;

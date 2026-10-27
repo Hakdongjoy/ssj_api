@@ -114,4 +114,36 @@ router.get('/stats', async (req, res) => {
   });
 });
 
+// GET /api/admin/reports?page=&limit= — 신고 목록 (자동조치 없음, 수동 검토용)
+router.get('/reports', async (req, res) => {
+  const { page = 1, limit = 20 } = req.query;
+  const safeLimit = Math.min(Number(limit) || 20, 100);
+  const offset = (Number(page) - 1) * safeLimit;
+
+  const { data, error, count } = await supabaseAdmin
+    .from('sjj_report')
+    .select('id, reporter_id, target_user_id, room_id, chat_room_id, reason, detail, created_at', { count: 'exact' })
+    .order('created_at', { ascending: false })
+    .range(offset, offset + safeLimit - 1);
+
+  if (error) {
+    console.error('[admin/reports] 조회 실패:', error.message);
+    return res.status(500).json({ code: 'ADMIN_REPORT_LIST_FAILED', error: '신고 목록 조회에 실패했습니다' });
+  }
+
+  const userIds = [...new Set(data.flatMap(r => [r.reporter_id, r.target_user_id]))];
+  const { data: users } = await supabaseAdmin.from('sjj_user').select('id, nick').in('id', userIds);
+  const nickMap = Object.fromEntries((users || []).map(u => [u.id, u.nick]));
+
+  const reports = data.map(r => ({
+    id: r.id,
+    reporter_id: r.reporter_id, reporter_nick: nickMap[r.reporter_id],
+    target_user_id: r.target_user_id, target_nick: nickMap[r.target_user_id],
+    room_id: r.room_id, chat_room_id: r.chat_room_id,
+    reason: r.reason, detail: r.detail, created_at: r.created_at,
+  }));
+
+  res.json({ total: count ?? reports.length, page: Number(page), reports });
+});
+
 module.exports = router;
