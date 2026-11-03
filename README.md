@@ -100,3 +100,4 @@ ssj/
 - 🤝 `sjj_room_apply` — 살짝 신청 (매칭 신청/수락/거절)
 - 💬 `sjj_chat_room` / `sjj_chat_message` — 매칭 수락 후 채팅
 - 🖼️ `sjj_room_photo` — 공고 사진 URL (Supabase Storage `room-photos` 버킷)
+- 🗑️ `sjj_room_photo_tmp` — 공고 등록 전 임시 사진 (room-photos/tmp/{user_id}/). 등록 완료 시 운영 경로로 이동 후 삭제, 미사용분은 7일 뒤 `/api/cron/photos/cleanup-tmp`로 정리

@@ -4,8 +4,11 @@ const { supabaseAdmin } = require('../supabase');
 const verifyToken = require('../middleware/auth');
 const { optionalAuth } = require('../middleware/auth');
 const { isBlockedPair, getBlockedUserIds } = require('../utils/block');
+const { containsBannedWord } = require('../utils/textFilter');
+const { removeStorageObjects, moveTmpPhotoToRoom } = require('../utils/storage');
 
 const PHOTO_CATEGORIES = ['거실', '방', '주방', '화장실', '현관', '기타'];
+const PHOTO_LIMIT = 10;
 
 // photos: [{ url, category? }] 중 room-photos 버킷 URL이면서 category가 화이트리스트 안에 있는(또는 비어있는) 것만 통과
 function sanitizePhotos(photos) {
@@ -184,6 +187,15 @@ router.post('/register', verifyToken, async (req, res) => {
     return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: '필요한 정보를 모두 입력했는지 다시 확인해주세요', fields: ['profile_agree'] });
   }
 
+  if (containsBannedWord(title) || containsBannedWord(bio)) {
+    return res.status(400).json({ code: 'INVALID_CONTENT', error: '사용할 수 없는 표현이 포함되어 있습니다' });
+  }
+
+  const validPhotos = sanitizePhotos(photosInput);
+  if (validPhotos.length > PHOTO_LIMIT) {
+    return res.status(400).json({ code: 'PHOTO_LIMIT_EXCEEDED', error: `사진은 최대 ${PHOTO_LIMIT}장까지 등록할 수 있습니다` });
+  }
+
   const { line: subway_line, canonicalName: canonicalSubwayStn } = await resolveSubwayLine(region, subway_stn);
 
   const { data: roomData, error: roomError } = await supabaseAdmin
@@ -211,12 +223,34 @@ router.post('/register', verifyToken, async (req, res) => {
     return res.status(500).json({ code: 'ROOM_REGISTER_FAILED', error: '공고 등록에 실패했습니다. 잠시 후 다시 시도해주세요' });
   }
 
-  const validPhotos = sanitizePhotos(photosInput);
   if (validPhotos.length > 0) {
-    const { error: photoError } = await supabaseAdmin
-      .from('sjj_room_photo')
-      .insert(validPhotos.map((p, i) => ({ room_id: roomData.id, url: p.url, category: p.category, sort_order: i })));
-    if (photoError) console.error('[room/register] 사진 저장 실패:', photoError.message);
+    // 프론트가 room-photos/tmp/{user_id}/ 에 올려서 /photos/tmp 로 등록해둔 사진만 운영 경로로 이동
+    const { data: tmpRows } = await supabaseAdmin
+      .from('sjj_room_photo_tmp')
+      .select('id, url, category')
+      .eq('user_id', user_id)
+      .in('url', validPhotos.map(p => p.url));
+    const tmpByUrl = Object.fromEntries((tmpRows || []).map(r => [r.url, r]));
+
+    const movedPhotos = [];
+    for (const p of validPhotos) {
+      const tmpRow = tmpByUrl[p.url];
+      if (!tmpRow) continue; // 본인이 등록한 임시 사진이 아니면 무시
+      const finalUrl = await moveTmpPhotoToRoom(p.url, user_id);
+      if (finalUrl) movedPhotos.push({ url: finalUrl, category: p.category ?? tmpRow.category });
+    }
+
+    if (movedPhotos.length > 0) {
+      const { error: photoError } = await supabaseAdmin
+        .from('sjj_room_photo')
+        .insert(movedPhotos.map((p, i) => ({ room_id: roomData.id, url: p.url, category: p.category, sort_order: i })));
+      if (photoError) console.error('[room/register] 사진 저장 실패:', photoError.message);
+    }
+
+    const usedTmpIds = Object.values(tmpByUrl).map(r => r.id);
+    if (usedTmpIds.length > 0) {
+      await supabaseAdmin.from('sjj_room_photo_tmp').delete().in('id', usedTmpIds);
+    }
   }
 
   console.log('[room/register] 완료');
@@ -934,6 +968,10 @@ router.patch('/:id', verifyToken, async (req, res) => {
     if (req.body[field] !== undefined) update[field] = req.body[field];
   }
 
+  if (containsBannedWord(update.title) || containsBannedWord(update.bio)) {
+    return res.status(400).json({ code: 'INVALID_CONTENT', error: '사용할 수 없는 표현이 포함되어 있습니다' });
+  }
+
   if (req.body.subway_stn !== undefined) {
     const region = update.region ?? room.region;
     const { line: subway_line, canonicalName: canonicalSubwayStn } = await resolveSubwayLine(region, req.body.subway_stn);
@@ -949,6 +987,87 @@ router.patch('/:id', verifyToken, async (req, res) => {
   if (updateError) {
     console.error('[room/patch] 실패:', updateError.message);
     return res.status(500).json({ code: 'ROOM_UPDATE_FAILED', error: '공고 수정에 실패했습니다. 잠시 후 다시 시도해주세요' });
+  }
+
+  res.json({ success: true });
+});
+
+// GET /api/room/photos/tmp — 본인이 등록해둔 임시 사진 목록 (등록 중간에 이탈 후 재진입 시 보여주는 용도)
+router.get('/photos/tmp', verifyToken, async (req, res) => {
+  const user_id = req.user.id;
+
+  const { data, error } = await supabaseAdmin
+    .from('sjj_room_photo_tmp')
+    .select('id, url, category, created_at')
+    .eq('user_id', user_id)
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.error('[room/photos/tmp] 조회 실패:', error.message);
+    return res.status(500).json({ code: 'PHOTO_LIST_FAILED', error: '사진 목록 조회에 실패했습니다. 잠시 후 다시 시도해주세요' });
+  }
+
+  res.json({ photos: data });
+});
+
+// POST /api/room/photos/tmp — 공고 등록 전 임시 사진 등록
+// 프론트가 Supabase Storage room-photos/tmp/{user_id}/ 경로에 먼저 업로드한 뒤, 그 public URL로 이 API를 호출해서 등록해둠.
+// 등록(/register) 완료 시 여기 등록된 사진 중 photos로 넘긴 것만 운영 경로로 옮겨지고, 미사용분은 7일 뒤 자동 정리됨.
+router.post('/photos/tmp', verifyToken, async (req, res) => {
+  const user_id = req.user.id;
+  const { url, category } = req.body;
+
+  const tmpPrefix = `${process.env.SUPABASE_URL}/storage/v1/object/public/room-photos/tmp/${user_id}/`;
+  if (typeof url !== 'string' || !url.startsWith(tmpPrefix)) {
+    return res.status(400).json({ code: 'INVALID_PHOTO_URL', error: '올바른 사진 URL이 아닙니다' });
+  }
+  if (category !== undefined && category !== null && !PHOTO_CATEGORIES.includes(category)) {
+    return res.status(400).json({ code: 'INVALID_PHOTO_URL', error: '올바르지 않은 카테고리입니다' });
+  }
+
+  const { count } = await supabaseAdmin
+    .from('sjj_room_photo_tmp')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user_id);
+
+  if ((count || 0) >= PHOTO_LIMIT) {
+    return res.status(400).json({ code: 'PHOTO_LIMIT_EXCEEDED', error: `사진은 최대 ${PHOTO_LIMIT}장까지 등록할 수 있습니다` });
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('sjj_room_photo_tmp')
+    .insert({ user_id, url, category: category ?? null })
+    .select('id, url, category, created_at')
+    .single();
+
+  if (error) {
+    console.error('[room/photos/tmp] 저장 실패:', error.message);
+    return res.status(500).json({ code: 'PHOTO_ADD_FAILED', error: '사진 저장에 실패했습니다. 잠시 후 다시 시도해주세요' });
+  }
+
+  res.json({ success: true, photo: data });
+});
+
+// DELETE /api/room/photos/tmp/:photoId — 등록 중 취소한 임시 사진 1장 삭제 (파일 + 행 모두 제거)
+router.delete('/photos/tmp/:photoId', verifyToken, async (req, res) => {
+  const user_id = req.user.id;
+  const { photoId } = req.params;
+
+  const { data: photo, error: fetchError } = await supabaseAdmin
+    .from('sjj_room_photo_tmp')
+    .select('id, user_id, url')
+    .eq('id', photoId)
+    .maybeSingle();
+
+  if (fetchError || !photo) return res.status(404).json({ code: 'PHOTO_NOT_FOUND', error: '사진을 찾을 수 없습니다' });
+  if (photo.user_id !== user_id) return res.status(403).json({ code: 'FORBIDDEN', error: '본인이 등록한 사진만 삭제할 수 있습니다' });
+
+  await removeStorageObjects([photo.url]);
+
+  const { error: deleteError } = await supabaseAdmin.from('sjj_room_photo_tmp').delete().eq('id', photoId);
+  if (deleteError) {
+    console.error('[room/photos/tmp] 삭제 실패:', deleteError.message);
+    return res.status(500).json({ code: 'PHOTO_DELETE_FAILED', error: '사진 삭제에 실패했습니다. 잠시 후 다시 시도해주세요' });
   }
 
   res.json({ success: true });
@@ -982,6 +1101,10 @@ router.post('/:id/photos', verifyToken, async (req, res) => {
     .from('sjj_room_photo')
     .select('id', { count: 'exact', head: true })
     .eq('room_id', room_id);
+
+  if ((currentCount || 0) + validPhotos.length > PHOTO_LIMIT) {
+    return res.status(400).json({ code: 'PHOTO_LIMIT_EXCEEDED', error: `사진은 최대 ${PHOTO_LIMIT}장까지 등록할 수 있습니다` });
+  }
 
   const { data: inserted, error: photoError } = await supabaseAdmin
     .from('sjj_room_photo')

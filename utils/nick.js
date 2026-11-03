@@ -38,6 +38,21 @@ async function assignNick(user_id, extraFields = {}) {
   return { nick, error };
 }
 
+const { containsBannedWord } = require('./textFilter');
+
+// 닉네임 유효성 검사. 통과 시 null, 실패 시 에러 메시지 문자열 반환
+function validateNick(nick) {
+  const trimmed = nick.trim();
+  if (trimmed.length < 2 || trimmed.length > 10) {
+    return '닉네임은 2자 이상 10자 이하로 입력해주세요';
+  }
+  if (containsBannedWord(trimmed)) {
+    return '사용할 수 없는 닉네임입니다';
+  }
+  return null;
+}
+
 module.exports = generateNick;
 module.exports.generateNick = generateNick;
 module.exports.assignNick = assignNick;
+module.exports.validateNick = validateNick;

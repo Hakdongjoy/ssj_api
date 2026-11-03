@@ -12,6 +12,7 @@ app.use('/api/room', require('./routes/room'));
 app.use('/api/chat', require('./routes/chat'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/report', require('./routes/report'));
+app.use('/api/cron', require('./routes/cron'));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`서버 실행 중: http://localhost:${PORT}`));

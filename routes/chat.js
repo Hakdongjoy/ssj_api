@@ -3,6 +3,7 @@ const router = express.Router();
 const { supabaseAdmin } = require('../supabase');
 const verifyToken = require('../middleware/auth');
 const { isBlockedPair } = require('../utils/block');
+const { containsBannedWordInChat } = require('../utils/textFilter');
 
 // GET /api/chat/rooms — 내 채팅방 목록 (집주인/신청자 양쪽 다)
 router.get('/rooms', verifyToken, async (req, res) => {
@@ -74,6 +75,10 @@ router.post('/rooms/:chatRoomId/messages', verifyToken, async (req, res) => {
 
   if (!content || !content.trim()) {
     return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: '필요한 정보를 모두 입력했는지 다시 확인해주세요' });
+  }
+
+  if (containsBannedWordInChat(content)) {
+    return res.status(400).json({ code: 'INVALID_CONTENT', error: '사용할 수 없는 표현이 포함되어 있습니다' });
   }
 
   const { data: chatRoom, error: roomError } = await supabaseAdmin

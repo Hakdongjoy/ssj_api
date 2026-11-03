@@ -3,6 +3,8 @@ const router = express.Router();
 const { supabaseAdmin } = require('../supabase');
 const verifyToken = require('../middleware/auth');
 const generateNick = require('../utils/nick');
+const { validateNick } = require('../utils/nick');
+const { containsBannedWord } = require('../utils/textFilter');
 
 // GET /api/user/nick/random — 인증 불필요
 router.get('/nick/random', async (req, res) => {
@@ -17,6 +19,11 @@ router.patch('/nick', verifyToken, async (req, res) => {
 
   if (!nick || nick.trim().length === 0) {
     return res.status(400).json({ code: 'INVALID_NICK', error: '필요한 정보를 모두 입력했는지 다시 확인해주세요' });
+  }
+
+  const nickError = validateNick(nick);
+  if (nickError) {
+    return res.status(400).json({ code: 'INVALID_NICK', error: nickError });
   }
 
   const { error } = await supabaseAdmin.from('sjj_user').update({ nick: nick.trim() }).eq('id', user_id);
@@ -46,6 +53,10 @@ router.post('/pref', verifyToken, async (req, res) => {
 
   if (profile_agree !== true) {
     return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: '필요한 정보를 모두 입력했는지 다시 확인해주세요', fields: ['profile_agree'] });
+  }
+
+  if (containsBannedWord(bio)) {
+    return res.status(400).json({ code: 'INVALID_BIO', error: '사용할 수 없는 표현이 포함되어 있습니다' });
   }
 
   const { error: profError } = await supabaseAdmin
