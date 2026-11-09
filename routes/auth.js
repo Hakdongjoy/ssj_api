@@ -3,6 +3,7 @@ const router = express.Router();
 const { supabase, supabaseAdmin } = require('../supabase');
 const { assignNick } = require('../utils/nick');
 const verifyToken = require('../middleware/auth');
+const { recordIssued, consumeRefreshToken, isIdleExpired, removeSession, removeAllSessions } = require('../utils/session');
 
 const MISSING_FIELD_MESSAGE = '필요한 정보를 모두 입력했는지 다시 확인해주세요';
 
@@ -169,6 +170,7 @@ router.post('/signup', async (req, res) => {
     return res.status(500).json({ code: 'PROFILE_SAVE_FAILED', error: '프로필 저장 실패' });
   }
 
+  if (data.session) await recordIssued(data.session, user_id);
   console.log('[signup] 완료, nick:', nick);
   res.json({ user_id, access_token, refresh_token, expires_in, nick });
 });
@@ -192,6 +194,7 @@ router.post('/login', async (req, res) => {
     return res.status(400).json({ code: 'LOGIN_FAILED', error: '로그인에 실패했습니다. 잠시 후 다시 시도해주세요' });
   }
 
+  await recordIssued(data.session, data.user.id);
   console.log('[login] 완료 user_id:', data.user.id);
   res.json({
     user_id: data.user.id,
@@ -208,11 +211,31 @@ router.post('/refresh', async (req, res) => {
     return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: MISSING_FIELD_MESSAGE, fields: ['refresh_token'] });
   }
 
+  // 재사용 탐지: 이미 한 번 쓴 refresh_token이면 탈취로 판단
+  const usage = await consumeRefreshToken(refresh_token);
+
   const { data, error } = await supabase.auth.refreshSession({ refresh_token });
+
+  if (usage.status === 'reused') {
+    // 계정의 모든 세션(해커가 받아 간 토큰 포함)을 끊고 정식 재로그인 요구
+    if (data?.session) await supabaseAdmin.auth.admin.signOut(data.session.access_token, 'global');
+    await removeAllSessions(usage.user_id);
+    console.warn('[refresh] 리프레시 토큰 재사용 탐지 → 전체 세션 로그아웃 user_id:', usage.user_id);
+    return res.status(401).json({ code: 'TOKEN_REUSED', error: '보안을 위해 로그아웃됐습니다. 다시 로그인해주세요' });
+  }
+
   if (error) {
     console.error('[refresh] 실패:', error.message);
     return res.status(401).json({ code: 'INVALID_REFRESH_TOKEN', error: '세션이 만료됐습니다. 다시 로그인해주세요' });
   }
+
+  // 14일 넘게 안 쓴 세션이면 끊고 재로그인 요구, 아니면 사용 시각 갱신(14일 연장)
+  if (await isIdleExpired(data.session.access_token)) {
+    await supabaseAdmin.auth.admin.signOut(data.session.access_token, 'local');
+    await removeSession(data.session.access_token);
+    return res.status(401).json({ code: 'INVALID_REFRESH_TOKEN', error: '세션이 만료됐습니다. 다시 로그인해주세요' });
+  }
+  await recordIssued(data.session, data.user.id);
 
   res.json({
     access_token: data.session.access_token,
@@ -232,12 +255,14 @@ router.post('/logout', async (req, res) => {
   if (accessToken) {
     const { error } = await supabaseAdmin.auth.admin.signOut(accessToken, 'local');
     revoked = !error;
+    await removeSession(accessToken);
   }
   if (!revoked && refresh_token) {
     const { data } = await supabase.auth.refreshSession({ refresh_token });
     if (data?.session) {
       const { error } = await supabaseAdmin.auth.admin.signOut(data.session.access_token, 'local');
       revoked = !error;
+      await removeSession(data.session.access_token);
     }
   }
 
