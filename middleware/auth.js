@@ -10,11 +10,25 @@ async function verifyToken(req, res, next) {
   const { data: { user }, error } = await supabase.auth.getUser(token);
 
   if (error || !user) {
+    // 만료(재발급 가능)와 위조/형식 오류(재로그인 필요)를 구분해서 프론트가 TOKEN_EXPIRED일 때만 refresh 하도록
+    if (isExpired(token)) {
+      return res.status(401).json({ code: 'TOKEN_EXPIRED', error: '로그인 시간이 만료됐습니다' });
+    }
     return res.status(401).json({ code: 'INVALID_TOKEN', error: '유효하지 않은 토큰입니다' });
   }
 
   req.user = user;
   next();
+}
+
+// JWT payload의 exp만 확인 (서명 검증은 위 getUser가 이미 실패시킨 상태라 에러 코드 구분 용도로만 사용)
+function isExpired(token) {
+  try {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
+    return typeof payload.exp === 'number' && payload.exp * 1000 < Date.now();
+  } catch {
+    return false;
+  }
 }
 
 // 토큰이 있으면 검증해서 req.user에 채우고, 없거나 유효하지 않아도 막지 않고 통과시킴

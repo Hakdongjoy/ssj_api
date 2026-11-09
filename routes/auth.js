@@ -221,6 +221,29 @@ router.post('/refresh', async (req, res) => {
   });
 });
 
+// POST /api/auth/logout — 서버 쪽 세션(refresh_token)까지 폐기. 이 기기 세션만 끊음
+// access_token이 만료됐으면 body의 refresh_token으로 세션을 찾아서 끊음. 이미 끊긴 세션이어도 항상 성공 응답
+router.post('/logout', async (req, res) => {
+  const auth = req.headers.authorization;
+  let accessToken = auth?.startsWith('Bearer ') ? auth.slice(7) : null;
+  const { refresh_token } = req.body || {};
+
+  let revoked = false;
+  if (accessToken) {
+    const { error } = await supabaseAdmin.auth.admin.signOut(accessToken, 'local');
+    revoked = !error;
+  }
+  if (!revoked && refresh_token) {
+    const { data } = await supabase.auth.refreshSession({ refresh_token });
+    if (data?.session) {
+      const { error } = await supabaseAdmin.auth.admin.signOut(data.session.access_token, 'local');
+      revoked = !error;
+    }
+  }
+
+  res.json({ success: true, revoked });
+});
+
 // POST /api/auth/social/complete — SNS(카카오 등) 로그인 후 프로필 초기화 및 완성도 확인
 router.post('/social/complete', verifyToken, async (req, res) => {
   const user_id = req.user.id;
