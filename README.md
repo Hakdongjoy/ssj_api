@@ -87,6 +87,7 @@ ssj/
 | `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` | Supabase 연결 |
 | `PORT` | 서버 포트 |
 | `KAKAO_REST_API_KEY` | 가까운역·도보시간 자동계산(`/room/address-search`)용 카카오 로컬 API 키 |
+| `GOOGLE_VISION_API_KEY` | 사진 업로드 시 음란·폭력 사진 검사(구글 클라우드 비전 세이프서치). 미설정 시 검사 생략 |
 
 ## 🗄️ DB 구조
 

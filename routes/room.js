@@ -6,6 +6,7 @@ const { optionalAuth } = require('../middleware/auth');
 const { isBlockedPair, getBlockedUserIds } = require('../utils/block');
 const { containsBannedWord } = require('../utils/textFilter');
 const { removeStorageObjects, moveTmpPhotoToRoom } = require('../utils/storage');
+const { isInappropriateImage } = require('../utils/imageModeration');
 
 const PHOTO_CATEGORIES = ['거실', '방', '주방', '화장실', '현관', '기타'];
 const PHOTO_LIMIT = 10;
@@ -655,6 +656,20 @@ async function insertSystemMessage(chat_room_id, sender_id, content) {
   if (error) console.error('[system message] 삽입 실패:', error.message);
 }
 
+// 한쪽이라도 나간(닫힌) 채팅방이 있으면 지워서, 다시 문의/신청할 때 새 채팅방이 열리게 함
+async function discardClosedChatRoom(room_id, applicant_id) {
+  const { data: closed } = await supabaseAdmin
+    .from('sjj_chat_room')
+    .select('id')
+    .eq('room_id', room_id)
+    .eq('applicant_id', applicant_id)
+    .or('owner_left_at.not.is.null,applicant_left_at.not.is.null')
+    .maybeSingle();
+  if (!closed) return;
+  await supabaseAdmin.from('sjj_chat_message').delete().eq('chat_room_id', closed.id);
+  await supabaseAdmin.from('sjj_chat_room').delete().eq('id', closed.id);
+}
+
 // PATCH /api/room/applications/:applyId — 수락/거절 (집주인만)
 router.patch('/applications/:applyId', verifyToken, async (req, res) => {
   const user_id = req.user.id;
@@ -736,6 +751,52 @@ router.patch('/applications/:applyId', verifyToken, async (req, res) => {
   res.json({ success: true, status: 'accepted', chat_room_id: thisChatRoom?.id ?? null });
 });
 
+// DELETE /api/room/applications/:applyId — "함께 살기 요청" 취소 (신청자 본인, 대기중일 때만)
+// 신청 행을 지우고 채팅방은 문의 상태(apply_id null)로 되돌림 → 같은 공고에 다시 신청 가능
+router.delete('/applications/:applyId', verifyToken, async (req, res) => {
+  const user_id = req.user.id;
+  const { applyId } = req.params;
+
+  const { data: apply, error: fetchError } = await supabaseAdmin
+    .from('sjj_room_apply')
+    .select('id, applicant_id, status')
+    .eq('id', applyId)
+    .maybeSingle();
+
+  if (fetchError || !apply) return res.status(404).json({ code: 'APPLY_NOT_FOUND', error: '신청 내역을 찾을 수 없습니다' });
+  if (apply.applicant_id !== user_id) return res.status(403).json({ code: 'FORBIDDEN', error: '본인 신청만 취소할 수 있습니다' });
+  if (apply.status !== 'pending') return res.status(400).json({ code: 'ALREADY_RESPONDED', error: '이미 처리된 신청은 취소할 수 없습니다' });
+
+  const { data: chatRoom } = await supabaseAdmin
+    .from('sjj_chat_room')
+    .select('id')
+    .eq('apply_id', apply.id)
+    .maybeSingle();
+
+  if (chatRoom) await supabaseAdmin.from('sjj_chat_room').update({ apply_id: null }).eq('id', chatRoom.id);
+
+  // 그 사이 집주인이 수락/거절했으면 지워지지 않음 → 채팅방 연결 원복 후 거절
+  const { data: deleted, error: deleteError } = await supabaseAdmin
+    .from('sjj_room_apply')
+    .delete()
+    .eq('id', apply.id)
+    .eq('status', 'pending')
+    .select('id');
+
+  if (deleteError || !deleted || deleted.length === 0) {
+    if (chatRoom) await supabaseAdmin.from('sjj_chat_room').update({ apply_id: apply.id }).eq('id', chatRoom.id);
+    if (deleteError) {
+      console.error('[room/apply cancel] 실패:', deleteError.message);
+      return res.status(500).json({ code: 'APPLY_CANCEL_FAILED', error: '취소에 실패했습니다. 잠시 후 다시 시도해주세요' });
+    }
+    return res.status(400).json({ code: 'ALREADY_RESPONDED', error: '이미 처리된 신청은 취소할 수 없습니다' });
+  }
+
+  await insertSystemMessage(chatRoom?.id, user_id, '함께 살기 요청을 취소했어요.');
+
+  res.json({ success: true, chat_room_id: chatRoom?.id ?? null });
+});
+
 // POST /api/room/:id/inquire — "문의하기". 신청 전에 먼저 채팅방을 열어줌 (이미 열려있으면 그 채팅방을 그대로 반환)
 router.post('/:id/inquire', verifyToken, async (req, res) => {
   const user_id = req.user.id;
@@ -751,6 +812,8 @@ router.post('/:id/inquire', verifyToken, async (req, res) => {
   if (!room.is_active) return res.status(400).json({ code: 'ROOM_NOT_ACTIVE', error: '이미 마감된 공고입니다' });
   if (room.user_id === user_id) return res.status(400).json({ code: 'SELF_INQUIRE_FORBIDDEN', error: '본인 공고에는 문의할 수 없습니다' });
   if (await isBlockedPair(user_id, room.user_id)) return res.status(403).json({ code: 'BLOCKED', error: '문의할 수 없습니다' });
+
+  await discardClosedChatRoom(room_id, user_id);
 
   const { data: existing } = await supabaseAdmin
     .from('sjj_chat_room')
@@ -811,6 +874,8 @@ router.post('/:id/apply', verifyToken, async (req, res) => {
     console.error('[room/apply] 실패:', error.message);
     return res.status(500).json({ code: 'APPLY_FAILED', error: '신청에 실패했습니다. 잠시 후 다시 시도해주세요' });
   }
+
+  await discardClosedChatRoom(room_id, user_id);
 
   const { data: chatRoom } = await supabaseAdmin
     .from('sjj_chat_room')
@@ -1034,6 +1099,11 @@ router.post('/photos/tmp', verifyToken, async (req, res) => {
     return res.status(400).json({ code: 'PHOTO_LIMIT_EXCEEDED', error: `사진은 최대 ${PHOTO_LIMIT}장까지 등록할 수 있습니다` });
   }
 
+  if (await isInappropriateImage(url)) {
+    await removeStorageObjects([url]);
+    return res.status(400).json({ code: 'INAPPROPRIATE_PHOTO', error: '부적절한 사진은 등록할 수 없습니다' });
+  }
+
   const { data, error } = await supabaseAdmin
     .from('sjj_room_photo_tmp')
     .insert({ user_id, url, category: category ?? null })
@@ -1104,6 +1174,13 @@ router.post('/:id/photos', verifyToken, async (req, res) => {
 
   if ((currentCount || 0) + validPhotos.length > PHOTO_LIMIT) {
     return res.status(400).json({ code: 'PHOTO_LIMIT_EXCEEDED', error: `사진은 최대 ${PHOTO_LIMIT}장까지 등록할 수 있습니다` });
+  }
+
+  const flags = await Promise.all(validPhotos.map(p => isInappropriateImage(p.url)));
+  const badUrls = validPhotos.filter((_, i) => flags[i]).map(p => p.url);
+  if (badUrls.length > 0) {
+    await removeStorageObjects(badUrls);
+    return res.status(400).json({ code: 'INAPPROPRIATE_PHOTO', error: '부적절한 사진은 등록할 수 없습니다', urls: badUrls });
   }
 
   const { data: inserted, error: photoError } = await supabaseAdmin
