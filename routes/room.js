@@ -1118,6 +1118,33 @@ router.post('/photos/tmp', verifyToken, async (req, res) => {
   res.json({ success: true, photo: data });
 });
 
+// PATCH /api/room/photos/tmp/:photoId — 임시 사진 카테고리 변경 (재진입 시 바꾼 카테고리로 복원되도록)
+router.patch('/photos/tmp/:photoId', verifyToken, async (req, res) => {
+  const user_id = req.user.id;
+  const { photoId } = req.params;
+  const { category } = req.body;
+
+  if (category !== null && !PHOTO_CATEGORIES.includes(category)) {
+    return res.status(400).json({ code: 'INVALID_PHOTO_URL', error: '올바르지 않은 카테고리입니다' });
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('sjj_room_photo_tmp')
+    .update({ category })
+    .eq('id', photoId)
+    .eq('user_id', user_id)
+    .select('id, url, category, created_at')
+    .maybeSingle();
+
+  if (error) {
+    console.error('[room/photos/tmp] 카테고리 변경 실패:', error.message);
+    return res.status(500).json({ code: 'PHOTO_UPDATE_FAILED', error: '사진 수정에 실패했습니다. 잠시 후 다시 시도해주세요' });
+  }
+  if (!data) return res.status(404).json({ code: 'PHOTO_NOT_FOUND', error: '사진을 찾을 수 없습니다' });
+
+  res.json({ success: true, photo: data });
+});
+
 // DELETE /api/room/photos/tmp/:photoId — 등록 중 취소한 임시 사진 1장 삭제 (파일 + 행 모두 제거)
 router.delete('/photos/tmp/:photoId', verifyToken, async (req, res) => {
   const user_id = req.user.id;
