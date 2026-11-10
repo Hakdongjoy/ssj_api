@@ -299,8 +299,47 @@ router.post('/social/complete', verifyToken, async (req, res) => {
   if (!user.birth) missing_fields.push('birth');
   if (!user.phone) missing_fields.push('phone');
 
+  // SNS 세션도 미사용 만료·재사용 탐지 대상에 넣음 (프론트가 Supabase에서 받은 refresh_token을 같이 보낸 경우)
+  const { refresh_token } = req.body || {};
+  if (refresh_token) {
+    await recordIssued({ access_token: req.headers.authorization.slice(7), refresh_token }, user_id);
+  }
+
   console.log('[social/complete] user_id:', user_id, 'nick:', nick, 'missing:', missing_fields);
   res.json({ user_id, nick, needs_profile: missing_fields.length > 0, missing_fields });
+});
+
+// POST /api/auth/social/profile — SNS 가입자의 휴대폰 인증 정보 저장
+// /phone/request → /phone/confirm 으로 인증 끝낸 번호를 보내면, 인증 때 받은 생년월일·성별까지 함께 저장
+router.post('/social/profile', verifyToken, async (req, res) => {
+  const user_id = req.user.id;
+  const { phone } = req.body;
+  if (!phone) {
+    return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: MISSING_FIELD_MESSAGE, fields: ['phone'] });
+  }
+
+  const { data: verify } = await supabaseAdmin
+    .from('sjj_phone_verify')
+    .select('birth, gender, verified')
+    .eq('phone', phone)
+    .maybeSingle();
+  if (!verify?.verified) {
+    return res.status(400).json({ code: 'PHONE_NOT_VERIFIED', error: '휴대폰 인증을 먼저 완료해주세요' });
+  }
+
+  const { error } = await supabaseAdmin
+    .from('sjj_user')
+    .update({ phone, birth: verify.birth, gender: verify.gender })
+    .eq('id', user_id);
+  if (error) {
+    console.error('[social/profile] 저장 실패:', error.message);
+    return res.status(500).json({ code: 'PROFILE_SAVE_FAILED', error: '프로필 저장에 실패했습니다. 잠시 후 다시 시도해주세요' });
+  }
+
+  // 인증 기록은 한 번만 쓰게 삭제
+  await supabaseAdmin.from('sjj_phone_verify').delete().eq('phone', phone);
+
+  res.json({ success: true });
 });
 
 module.exports = router;
