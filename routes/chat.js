@@ -114,7 +114,7 @@ router.post('/rooms/:chatRoomId/messages', verifyToken, async (req, res) => {
   const { chatRoomId } = req.params;
   const { content } = req.body;
 
-  if (!content || !content.trim()) {
+  if (typeof content !== 'string' || !content.trim()) {
     return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: '필요한 정보를 모두 입력했는지 다시 확인해주세요' });
   }
 

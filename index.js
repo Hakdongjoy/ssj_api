@@ -1,4 +1,5 @@
 const express = require('express');
+const { errorHandler } = require('./utils/asyncErrors'); // 라우트 등록 전에 로드해야 함
 const cors = require('cors');
 const app = express();
 require('dotenv').config();
@@ -13,6 +14,8 @@ app.use('/api/chat', require('./routes/chat'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/report', require('./routes/report'));
 app.use('/api/cron', require('./routes/cron'));
+
+app.use(errorHandler);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`서버 실행 중: http://localhost:${PORT}`));

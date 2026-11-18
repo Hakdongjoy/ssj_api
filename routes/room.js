@@ -453,6 +453,11 @@ router.get('/address-search', async (req, res) => {
   }
 });
 
+// PostgREST or() 필터 값 이스케이프: 쉼표·괄호 등이 조건 구분자로 해석되지 않게 큰따옴표로 감쌈
+function quoteFilterValue(v) {
+  return `"${String(v).replace(/["\\]/g, '\\$&')}"`;
+}
+
 // 조건필터(생활조건/동거인조건/비용) — 리뉴얼 이후 전부 sjj_room 컬럼이라 조인 없이 바로 필터링. list/count가 공유.
 function applyRoomFilters(query, qp) {
   const {
@@ -476,8 +481,9 @@ function applyRoomFilters(query, qp) {
   // 성별 무관(any) 공고는 어떤 성별로 필터링해도 항상 포함
   if (pref_gender && pref_gender !== 'any') query = query.in('pref_gender', ['any', pref_gender]);
   // 등록자가 연령대/직업을 "상관없음"(null)으로 뒀으면 어떤 값으로 필터링해도 항상 포함
-  if (pref_age_range) query = query.or(`pref_age_range.eq.${pref_age_range},pref_age_range.is.null`);
-  if (pref_job) query = query.or(`pref_job.eq.${pref_job},pref_job.is.null`);
+  // or() 조건 문자열에 사용자 입력을 넣으므로 반드시 따옴표로 감싸서 다른 조건이 끼어들지 못하게 함
+  if (pref_age_range) query = query.or(`pref_age_range.eq.${quoteFilterValue(pref_age_range)},pref_age_range.is.null`);
+  if (pref_job) query = query.or(`pref_job.eq.${quoteFilterValue(pref_job)},pref_job.is.null`);
   if (rent_min) query = query.gte('rent', Number(rent_min));
   if (rent_max) query = query.lte('rent', Number(rent_max));
 
@@ -941,19 +947,20 @@ router.get('/:id', optionalAuth, async (req, res) => {
     photos = (photoRows || []).map(p => ({ url: p.url, category: p.category }));
   }
 
-  // 도로명주소/상세주소는 매칭 전까지 비공개 — 본인(호스트) 또는 수락된 신청자(sjj_chat_room)만 조회 가능
+  // 도로명주소/상세주소는 매칭 전까지 비공개 — 본인(호스트) 또는 신청이 수락된 사람만 조회 가능 (문의만 한 사람은 불가)
   let addressVisible = false;
   if (req.user) {
     if (req.user.id === data.user_id) {
       addressVisible = true;
     } else {
-      const { data: chatRoom } = await supabaseAdmin
-        .from('sjj_chat_room')
+      const { data: accepted } = await supabaseAdmin
+        .from('sjj_room_apply')
         .select('id')
         .eq('room_id', data.id)
         .eq('applicant_id', req.user.id)
-        .maybeSingle();
-      addressVisible = !!chatRoom;
+        .eq('status', 'accepted')
+        .limit(1);
+      addressVisible = (accepted || []).length > 0;
     }
   }
 

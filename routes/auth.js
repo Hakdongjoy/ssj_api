@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const router = express.Router();
 const { supabase, supabaseAdmin } = require('../supabase');
 const { assignNick } = require('../utils/nick');
@@ -113,9 +114,14 @@ router.post('/phone/confirm', async (req, res) => {
     return res.status(400).json({ code: 'VERIFY_CODE_MISMATCH', error: '인증번호가 일치하지 않습니다' });
   }
 
-  await supabaseAdmin.from('sjj_phone_verify').update({ verified: true }).eq('phone', phone);
+  // 인증한 사람만 이 인증 결과를 쓸 수 있도록 일회용 토큰을 발급 (code 칼럼을 토큰으로 교체, 30분 유효)
+  const verify_token = crypto.randomBytes(24).toString('hex');
+  await supabaseAdmin
+    .from('sjj_phone_verify')
+    .update({ verified: true, code: verify_token, expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString() })
+    .eq('phone', phone);
 
-  res.json({ success: true });
+  res.json({ success: true, verify_token });
 });
 
 // POST /api/auth/signup
@@ -313,17 +319,19 @@ router.post('/social/complete', verifyToken, async (req, res) => {
 // /phone/request → /phone/confirm 으로 인증 끝낸 번호를 보내면, 인증 때 받은 생년월일·성별까지 함께 저장
 router.post('/social/profile', verifyToken, async (req, res) => {
   const user_id = req.user.id;
-  const { phone } = req.body;
-  if (!phone) {
-    return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: MISSING_FIELD_MESSAGE, fields: ['phone'] });
+  const { phone, verify_token } = req.body;
+  const missingFields = ['phone', 'verify_token'].filter(f => !req.body[f]);
+  if (missingFields.length > 0) {
+    return res.status(400).json({ code: 'MISSING_REQUIRED_FIELD', error: MISSING_FIELD_MESSAGE, fields: missingFields });
   }
 
+  // /phone/confirm에서 받은 일회용 토큰이 맞아야만 인증된 번호로 인정 (남의 인증 기록 도용 방지)
   const { data: verify } = await supabaseAdmin
     .from('sjj_phone_verify')
-    .select('birth, gender, verified')
+    .select('birth, gender, verified, code, expires_at')
     .eq('phone', phone)
     .maybeSingle();
-  if (!verify?.verified) {
+  if (!verify?.verified || verify.code !== verify_token || new Date(verify.expires_at) < new Date()) {
     return res.status(400).json({ code: 'PHONE_NOT_VERIFIED', error: '휴대폰 인증을 먼저 완료해주세요' });
   }
 
